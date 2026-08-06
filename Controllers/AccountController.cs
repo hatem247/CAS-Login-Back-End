@@ -64,7 +64,8 @@ public class AccountController : ControllerBase
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var result = await _accountService.GetProfileAsync(accountId, cancellationToken);
+            var credentialSource = User.FindFirst("CredentialSource")?.Value ?? "Login";
+            var result = await _accountService.GetProfileAsync(accountId, credentialSource, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Profile retrieved successfully."));
         }
         catch (Exception ex)
@@ -94,7 +95,8 @@ public class AccountController : ControllerBase
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var result = await _accountService.UpdateProfileAsync(accountId, request, cancellationToken);
+            var credentialSource = User.FindFirst("CredentialSource")?.Value ?? "Login";
+            var result = await _accountService.UpdateProfileAsync(accountId, request, credentialSource, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Profile updated successfully."));
         }
         catch (Exception ex)

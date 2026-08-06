@@ -11,7 +11,7 @@ public interface ITokenService
     /// <summary>
     /// Generates the identity SSO token.
     /// </summary>
-    string GenerateSsoToken(long accountId);
+    string GenerateSsoToken(long accountId, string credentialSource);
 
     /// <summary>
     /// Generates a system JWT containing the user's identity and role

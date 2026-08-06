@@ -22,6 +22,7 @@ public interface IAccountService
     /// </summary>
     Task<ProfileResponse> GetProfileAsync(
         int accountId,
+        string credentialSource,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -30,6 +31,7 @@ public interface IAccountService
     Task<ProfileResponse> UpdateProfileAsync(
         int accountId,
         UpdateProfileRequest request,
+        string credentialSource,
         CancellationToken cancellationToken = default);
 
     /// <summary>

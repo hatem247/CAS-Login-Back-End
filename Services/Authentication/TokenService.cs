@@ -17,11 +17,12 @@ public sealed class TokenService : ITokenService
         _configuration = configuration;
     }
 
-    public string GenerateSsoToken(long accountId)
+    public string GenerateSsoToken(long accountId, string credentialSource)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, accountId.ToString()),
+            new("CredentialSource", credentialSource),
             new("TokenType", "SSO")
         };
 
@@ -41,6 +42,8 @@ public sealed class TokenService : ITokenService
             new("BusinessEntityName", descriptor.BusinessEntityName),
 
             new(ClaimTypes.Role, descriptor.Role),
+
+            new("CredentialSource", descriptor.CredentialSource),
 
             new("TokenType", "System")
         };

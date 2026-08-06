@@ -59,6 +59,7 @@ public class AccountService : IAccountService
         var login = new Login
         {
             AccountId = account.Id,
+            Email = request.Email,
             PasswordHash = passwordHash
         };
 
@@ -70,7 +71,7 @@ public class AccountService : IAccountService
         return new ProfileResponse
         {
             AccountId = checked((int)account.Id),
-            Email = account.Email,
+            Email = login.Email,
             FullNameEn = account.FullNameEn,
             FullNameAr = account.FullNameAr,
             IsActive = account.IsActive
@@ -79,6 +80,7 @@ public class AccountService : IAccountService
 
     public async Task<ProfileResponse> GetProfileAsync(
         int accountId,
+        string credentialSource,
         CancellationToken cancellationToken = default)
     {
         var account = await _dbContext.Accounts
@@ -90,10 +92,12 @@ public class AccountService : IAccountService
             throw new NotFoundException($"Account with ID {accountId} not found.");
         }
 
+        var email = await GetCredentialEmailAsync(account, credentialSource, cancellationToken);
+
         return new ProfileResponse
         {
             AccountId = checked((int)account.Id),
-            Email = account.Email,
+            Email = email,
             FullNameEn = account.FullNameEn,
             FullNameAr = account.FullNameAr,
             IsActive = account.IsActive
@@ -103,6 +107,7 @@ public class AccountService : IAccountService
     public async Task<ProfileResponse> UpdateProfileAsync(
         int accountId,
         UpdateProfileRequest request,
+        string credentialSource,
         CancellationToken cancellationToken = default)
     {
         // Validate request
@@ -133,10 +138,12 @@ public class AccountService : IAccountService
 
         _logger.LogInformation("Profile updated for account: {AccountId}", accountId);
 
+        var email = await GetCredentialEmailAsync(account, credentialSource, cancellationToken);
+
         return new ProfileResponse
         {
             AccountId = checked((int)account.Id),
-            Email = account.Email,
+            Email = email,
             FullNameEn = account.FullNameEn,
             FullNameAr = account.FullNameAr,
             IsActive = account.IsActive
@@ -290,5 +297,24 @@ public class AccountService : IAccountService
         {
             throw new ValidationException("Registration validation failed.", errors);
         }
+    }
+
+    private async Task<string> GetCredentialEmailAsync(
+        Account account,
+        string credentialSource,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(credentialSource, "Account", StringComparison.Ordinal))
+            return account.Email;
+
+        var email = await _dbContext.Logins
+            .AsNoTracking()
+            .Where(login => login.AccountId == account.Id)
+            .Select(login => login.Email)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return !string.IsNullOrWhiteSpace(email)
+            ? email
+            : throw new NotFoundException($"Login email for account {account.Id} not found.");
     }
 }

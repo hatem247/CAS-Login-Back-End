@@ -13,4 +13,6 @@ public sealed class SystemTokenDescriptor
     public string BusinessEntityName { get; init; } = string.Empty;
 
     public string Role { get; init; } = string.Empty;
+
+    public string CredentialSource { get; init; } = string.Empty;
 }
