@@ -1,20 +1,21 @@
+﻿using System;
+using System.Collections.Generic;
+
 namespace CAS_Login_Back_End.Data.Entities;
 
-/// <summary>
-/// Represents login credentials for an account.
-/// </summary>
-public class Login
+public partial class Login
 {
-    public int LoginId { get; set; }
+    public long Id { get; set; }
 
-    public int AccountId { get; set; }
+    public long AccountId { get; set; }
 
-    public string PasswordHash { get; set; } = string.Empty;
+    public string Email { get; set; } = null!;
 
-    public DateTime CreatedAt { get; set; }
+    public string PasswordHash { get; set; } = null!;
 
-    public DateTime? UpdatedAt { get; set; }
+    public long StatusId { get; set; }
 
-    // Navigation properties
-    public Account Account { get; set; } = null!;
+    public virtual Account Account { get; set; } = null!;
+
+    public virtual Status Status { get; set; } = null!;
 }

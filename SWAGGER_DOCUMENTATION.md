@@ -54,11 +54,11 @@ The CAS Login API includes comprehensive Swagger/OpenAPI documentation enabled i
 ### Roles (`/api/role`)
 - **GET /api/role** - Get all roles
 - **GET /api/role/{id}** - Get specific role
-- **GET /api/role/account/{businessEntityId}** - Get user's role
+- **GET /api/role/account/{businessEntityName}** - Get user's role
 
 ### Business Entities (`/api/businessentity`)
 - **GET /api/businessentity** - Get all business entities
-- **GET /api/businessentity/{id}** - Get specific entity
+- **GET /api/businessentity/{name}** - Get specific entity
 - **GET /api/businessentity/my-entities** - Get user's entities
 
 ## How to Use with Swagger UI
@@ -66,7 +66,7 @@ The CAS Login API includes comprehensive Swagger/OpenAPI documentation enabled i
 ### Step 1: Login
 1. Click on **POST /api/auth/login**
 2. Click **Try it out**
-3. Enter email, password, businessEntityId, and businessEntityName
+3. Enter email, password, and businessEntityName
 4. Click **Execute**
 5. Copy the `SsoToken` and `SystemToken` from the response
 

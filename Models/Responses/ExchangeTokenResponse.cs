@@ -1,11 +1,12 @@
 namespace CAS_Login_Back_End.Models.Responses;
 
-/// <summary>
-/// Response model for exchange token operation.
-/// </summary>
-public class ExchangeTokenResponse
+public sealed class ExchangeTokenResponse
 {
-    public string SystemToken { get; set; } = string.Empty;
+    public string JwtToken { get; init; } = string.Empty;
 
-    public int ExpiresIn { get; set; }
+    public string Role { get; init; } = string.Empty;
+
+    public string BusinessEntityName { get; init; } = string.Empty;
+
+    public DateTime JwtExpiresAt { get; init; }
 }

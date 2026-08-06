@@ -13,9 +13,9 @@ public interface IBusinessEntityService
     Task<IEnumerable<BusinessEntityResponse>> GetAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Retrieves a specific business entity by ID.
+    /// Retrieves a specific business entity by name.
     /// </summary>
-    Task<BusinessEntityResponse> GetByIdAsync(int businessEntityId, CancellationToken cancellationToken = default);
+    Task<BusinessEntityResponse> GetByNameAsync(string businessEntityName, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retrieves all business entities accessible to a specific account.
@@ -30,8 +30,6 @@ public interface IBusinessEntityService
 /// </summary>
 public class BusinessEntityResponse
 {
-    public int BusinessEntityId { get; set; }
-
     public string Name { get; set; } = string.Empty;
 
     public string Description { get; set; } = string.Empty;

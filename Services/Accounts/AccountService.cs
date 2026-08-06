@@ -48,7 +48,7 @@ public class AccountService : IAccountService
             FullNameEn = request.FullNameEn,
             FullNameAr = request.FullNameAr,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateOnly.FromDateTime(DateTime.UtcNow)
         };
 
         _dbContext.Accounts.Add(account);
@@ -58,19 +58,18 @@ public class AccountService : IAccountService
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
         var login = new Login
         {
-            AccountId = account.AccountId,
-            PasswordHash = passwordHash,
-            CreatedAt = DateTime.UtcNow
+            AccountId = account.Id,
+            PasswordHash = passwordHash
         };
 
         _dbContext.Logins.Add(login);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("New account registered: {AccountId} ({Email})", account.AccountId, account.Email);
+        _logger.LogInformation("New account registered: {AccountId} ({Email})", account.Id, account.Email);
 
         return new ProfileResponse
         {
-            AccountId = account.AccountId,
+            AccountId = checked((int)account.Id),
             Email = account.Email,
             FullNameEn = account.FullNameEn,
             FullNameAr = account.FullNameAr,
@@ -84,7 +83,7 @@ public class AccountService : IAccountService
     {
         var account = await _dbContext.Accounts
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.AccountId == accountId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
 
         if (account is null)
         {
@@ -93,7 +92,7 @@ public class AccountService : IAccountService
 
         return new ProfileResponse
         {
-            AccountId = account.AccountId,
+            AccountId = checked((int)account.Id),
             Email = account.Email,
             FullNameEn = account.FullNameEn,
             FullNameAr = account.FullNameAr,
@@ -119,7 +118,7 @@ public class AccountService : IAccountService
 
         // Get account
         var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.AccountId == accountId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
 
         if (account is null)
         {
@@ -129,7 +128,6 @@ public class AccountService : IAccountService
         // Update profile
         account.FullNameEn = request.FullNameEn;
         account.FullNameAr = request.FullNameAr;
-        account.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -137,7 +135,7 @@ public class AccountService : IAccountService
 
         return new ProfileResponse
         {
-            AccountId = account.AccountId,
+            AccountId = checked((int)account.Id),
             Email = account.Email,
             FullNameEn = account.FullNameEn,
             FullNameAr = account.FullNameAr,
@@ -183,7 +181,6 @@ public class AccountService : IAccountService
 
         // Update password
         login.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        login.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -212,7 +209,7 @@ public class AccountService : IAccountService
 
         // TODO: Implement password reset token generation and email sending
         // For now, this is a placeholder
-        _logger.LogInformation("Forgot password initiated for account: {AccountId}", account.AccountId);
+        _logger.LogInformation("Forgot password initiated for account: {AccountId}", account.Id);
     }
 
     public async Task ResetPasswordAsync(
@@ -246,19 +243,18 @@ public class AccountService : IAccountService
         }
 
         var login = await _dbContext.Logins
-            .FirstOrDefaultAsync(l => l.AccountId == account.AccountId, cancellationToken);
+            .FirstOrDefaultAsync(l => l.AccountId == account.Id, cancellationToken);
 
         if (login is null)
         {
-            throw new NotFoundException($"Login record for account {account.AccountId} not found.");
+            throw new NotFoundException($"Login record for account {account.Id} not found.");
         }
 
         login.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        login.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Password reset for account: {AccountId}", account.AccountId);
+        _logger.LogInformation("Password reset for account: {AccountId}", account.Id);
     }
 
     private static void ValidateRegisterRequest(RegisterRequest request)

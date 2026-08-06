@@ -1,54 +1,38 @@
 using System.Security.Claims;
+using CAS_Login_Back_End.Models.Authentication;
 
 namespace CAS_Login_Back_End.Services.Interfaces;
 
 /// <summary>
-/// Service for JWT token generation, validation, and claim reading.
-/// Handles both SSO tokens and System tokens.
+/// Generates and validates JWT tokens used by the CAS.
 /// </summary>
 public interface ITokenService
 {
     /// <summary>
-    /// Generates an SSO token (identity only, 8 hours expiration).
-    /// Contains: AccountId, TokenType
+    /// Generates the identity SSO token.
     /// </summary>
-    string GenerateSsoToken(int accountId);
+    string GenerateSsoToken(long accountId);
 
     /// <summary>
-    /// Generates a System JWT token (1 hour expiration, for ONE business entity).
-    /// Contains: AccountId, Email, FullNameEn, FullNameAr, BusinessEntityId, BusinessEntityName, Role, TokenType
+    /// Generates a system JWT containing the user's identity and role
+    /// for a single Business Entity.
     /// </summary>
-    string GenerateSystemToken(
-        int accountId,
-        string email,
-        string fullNameEn,
-        string fullNameAr,
-        int businessEntityId,
-        string businessEntityName,
-        string roleName);
+    string GenerateSystemToken(SystemTokenDescriptor descriptor);
 
     /// <summary>
-    /// Validates a token and returns whether it's valid.
+    /// Validates a JWT.
     /// </summary>
     bool ValidateToken(string token);
 
     /// <summary>
-    /// Reads all claims from a token.
+    /// Returns a validated ClaimsPrincipal.
+    /// Throws if the token is invalid.
     /// </summary>
-    IEnumerable<Claim> ReadClaims(string token);
+    ClaimsPrincipal GetPrincipal(string token);
 
-    /// <summary>
-    /// Reads AccountId claim from token.
-    /// </summary>
-    int? ReadAccountId(string token);
+    long? ReadAccountId(string token);
 
-    /// <summary>
-    /// Reads TokenType claim from token.
-    /// </summary>
     string? ReadTokenType(string token);
 
-    /// <summary>
-    /// Reads expiration from token.
-    /// </summary>
     DateTime? ReadExpiration(string token);
 }

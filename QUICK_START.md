@@ -69,7 +69,6 @@
 {
   "email": "user@example.com",
   "password": "password123",
-  "businessEntityId": 1,
   "businessEntityName": "Zspark"
 }
 ```

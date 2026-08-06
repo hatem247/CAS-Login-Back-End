@@ -1,4 +1,5 @@
 using CAS_Login_Back_End.Data;
+using CAS_Login_Back_End.Data.Entities;
 using CAS_Login_Back_End.Exceptions;
 using CAS_Login_Back_End.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -23,60 +24,64 @@ public class BusinessEntityService : IBusinessEntityService
 
     public async Task<IEnumerable<BusinessEntityResponse>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var entities = await _dbContext.BusinessEntities
+        var roles = await _dbContext.Roles
             .AsNoTracking()
-            .Where(be => be.IsActive)
-            .Select(be => new BusinessEntityResponse
-            {
-                BusinessEntityId = be.BusinessEntityId,
-                Name = be.Name,
-                Description = be.Description,
-                IsActive = be.IsActive
-            })
+            .Where(role => !string.IsNullOrWhiteSpace(role.BusinessEntity))
+            .Select(role => new RoleBusinessEntityRow(role.Id, role.BusinessEntity!))
             .ToListAsync(cancellationToken);
 
-        return entities;
+        return ToBusinessEntityResponses(roles);
     }
 
-    public async Task<BusinessEntityResponse> GetByIdAsync(int businessEntityId, CancellationToken cancellationToken = default)
+    public async Task<BusinessEntityResponse> GetByNameAsync(string businessEntityName, CancellationToken cancellationToken = default)
     {
-        var entity = await _dbContext.BusinessEntities
+        var roles = await _dbContext.Roles
             .AsNoTracking()
-            .FirstOrDefaultAsync(be => be.BusinessEntityId == businessEntityId, cancellationToken);
+            .Where(role => !string.IsNullOrWhiteSpace(role.BusinessEntity))
+            .Select(role => new RoleBusinessEntityRow(role.Id, role.BusinessEntity!))
+            .ToListAsync(cancellationToken);
+
+        var entity = ToBusinessEntityResponses(roles)
+            .FirstOrDefault(entity => string.Equals(entity.Name, businessEntityName, StringComparison.OrdinalIgnoreCase));
 
         if (entity is null)
         {
-            throw new NotFoundException($"Business entity with ID {businessEntityId} not found.");
+            throw new NotFoundException($"Business entity '{businessEntityName}' was not found.");
         }
 
-        return new BusinessEntityResponse
-        {
-            BusinessEntityId = entity.BusinessEntityId,
-            Name = entity.Name,
-            Description = entity.Description,
-            IsActive = entity.IsActive
-        };
+        return entity;
     }
 
     public async Task<IEnumerable<BusinessEntityResponse>> GetAccountBusinessEntitiesAsync(
         int accountId,
         CancellationToken cancellationToken = default)
     {
-        var entities = await _dbContext.AccountRoles
+        var assignedEntityNames = await _dbContext.AccountRoles
             .AsNoTracking()
-            .Where(ar => ar.AccountId == accountId)
-            .Select(ar => ar.BusinessEntity)
-            .Where(be => be.IsActive)
-            .Distinct()
-            .Select(be => new BusinessEntityResponse
-            {
-                BusinessEntityId = be.BusinessEntityId,
-                Name = be.Name,
-                Description = be.Description,
-                IsActive = be.IsActive
-            })
+            .Where(accountRole => accountRole.AccountId == accountId &&
+                                  !string.IsNullOrWhiteSpace(accountRole.BusinessEntityName))
+            .Select(accountRole => accountRole.BusinessEntityName!)
             .ToListAsync(cancellationToken);
 
-        return entities;
+        var roles = await _dbContext.Roles
+            .AsNoTracking()
+            .Where(role => role.BusinessEntity != null && assignedEntityNames.Contains(role.BusinessEntity))
+            .Select(role => new RoleBusinessEntityRow(role.Id, role.BusinessEntity!))
+            .ToListAsync(cancellationToken);
+
+        return ToBusinessEntityResponses(roles);
     }
+
+    private static IEnumerable<BusinessEntityResponse> ToBusinessEntityResponses(
+        IEnumerable<RoleBusinessEntityRow> roles) => roles
+        .GroupBy(role => role.BusinessEntity, StringComparer.OrdinalIgnoreCase)
+        .Select(group => new BusinessEntityResponse
+        {
+            Name = group.First().BusinessEntity,
+            Description = group.First().BusinessEntity,
+            IsActive = true
+        })
+        .OrderBy(entity => entity.Name);
+
+    private sealed record RoleBusinessEntityRow(long Id, string BusinessEntity);
 }

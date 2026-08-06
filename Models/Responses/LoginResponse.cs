@@ -1,20 +1,24 @@
 namespace CAS_Login_Back_End.Models.Responses;
 
-/// <summary>
-/// Response model for login operation.
-/// Contains both SSO token and System JWT token.
-/// </summary>
-public class LoginResponse
+public sealed class LoginResponse
 {
-    public string SsoToken { get; set; } = string.Empty;
+    public string SsoToken { get; init; } = string.Empty;
 
-    public string SystemToken { get; set; } = string.Empty;
+    public string JwtToken { get; init; } = string.Empty;
 
-    public ProfileResponse Profile { get; set; } = new();
+    public long AccountId { get; init; }
 
-    public RoleResponse Role { get; set; } = new();
+    public string Email { get; init; } = string.Empty;
 
-    public int SsoExpiresIn { get; set; }
+    public string FullNameEn { get; init; } = string.Empty;
 
-    public int SystemExpiresIn { get; set; }
+    public string FullNameAr { get; init; } = string.Empty;
+
+    public string Role { get; init; } = string.Empty;
+
+    public string BusinessEntityName { get; init; } = string.Empty;
+
+    public DateTime SsoExpiresAt { get; init; }
+
+    public DateTime JwtExpiresAt { get; init; }
 }

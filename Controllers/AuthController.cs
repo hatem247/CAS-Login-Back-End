@@ -10,102 +10,95 @@ namespace CAS_Login_Back_End.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController : ControllerBase
+public sealed class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
-    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService)
     {
         _authService = authService;
-        _logger = logger;
     }
 
     /// <summary>
-    /// Authenticates user with email and password, returns SSO and System tokens.
+    /// Authenticates a user and returns both the SSO token and the System JWT.
     /// </summary>
-    /// <remarks>
-    /// POST /api/auth/login
-    /// </remarks>
     [HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<dynamic>>> LoginAsync(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = await _authService.LoginAsync(
-                request.Email,
-                request.Password,
-                request.BusinessEntityId,
-                request.BusinessEntityName,
-                cancellationToken);
+        var result = await _authService.LoginAsync(
+            request.Email,
+            request.Password,
+            request.BusinessEntityName,
+            cancellationToken);
 
-            return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Login successful."));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Login error");
-            throw;
-        }
+        return Ok(ApiResponse<dynamic>.SuccessResponse(
+            result,
+            "Login successful."));
     }
 
     /// <summary>
-    /// Exchanges SSO token for a System token for another business entity.
+    /// Exchanges a valid SSO token for a System JWT belonging to another Business Entity.
     /// </summary>
-    /// <remarks>
-    /// POST /api/auth/exchange
-    /// Authorization: Bearer {SSO_TOKEN}
-    /// </remarks>
     [HttpPost("exchange")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<dynamic>>> ExchangeTokenAsync(
         [FromBody] ExchangeTokenRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var authHeader = Request.Headers.Authorization.ToString();
-            var token = authHeader.Replace("Bearer ", "");
+        var token = GetBearerToken();
 
-            var result = await _authService.ExchangeTokenAsync(
-                token,
-                request.BusinessEntityId,
-                request.BusinessEntityName,
-                cancellationToken);
+        var result = await _authService.ExchangeTokenAsync(
+            token,
+            request.BusinessEntityName,
+            cancellationToken);
 
-            return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Token exchanged successfully."));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Token exchange error");
-            throw;
-        }
+        return Ok(ApiResponse<dynamic>.SuccessResponse(
+            result,
+            "Token exchanged successfully."));
     }
 
     /// <summary>
-    /// Validates a token.
+    /// Validates an SSO or System JWT.
     /// </summary>
-    /// <remarks>
-    /// POST /api/auth/validate
-    /// Authorization: Bearer {TOKEN}
-    /// </remarks>
     [HttpPost("validate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<dynamic>>> ValidateTokenAsync(
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var authHeader = Request.Headers.Authorization.ToString();
-            var token = authHeader.Replace("Bearer ", "");
+        var token = GetBearerToken();
 
-            var result = await _authService.ValidateTokenAsync(token, cancellationToken);
+        var result = await _authService.ValidateTokenAsync(
+            token,
+            cancellationToken);
 
-            return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Token validation complete."));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Token validation error");
-            throw;
-        }
+        return Ok(ApiResponse<dynamic>.SuccessResponse(
+            result,
+            "Token validation completed successfully."));
+    }
+
+    /// <summary>
+    /// Extracts the Bearer token from the Authorization header.
+    /// </summary>
+    private string GetBearerToken()
+    {
+        if (!Request.Headers.TryGetValue("Authorization", out var authorizationHeader))
+            throw new UnauthorizedAccessException("Authorization header is missing.");
+
+        const string bearerPrefix = "Bearer ";
+
+        var header = authorizationHeader.ToString();
+
+        if (!header.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Invalid Authorization header.");
+
+        var token = header[bearerPrefix.Length..].Trim();
+
+        if (string.IsNullOrWhiteSpace(token))
+            throw new UnauthorizedAccessException("Bearer token is missing.");
+
+        return token;
     }
 }

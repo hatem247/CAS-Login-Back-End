@@ -27,6 +27,7 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled exception while processing {Method} {Path}", context.Request.Method, context.Request.Path);
             await HandleExceptionAsync(context, ex);
         }
     }
@@ -62,7 +63,9 @@ public class ExceptionHandlingMiddleware
             {
                 statusCode = StatusCodes.Status500InternalServerError,
                 success = false,
-                message = "An internal server error occurred.",
+                message = context.RequestServices.GetService<IHostEnvironment>()?.IsDevelopment() == true
+                    ? exception.Message
+                    : "An internal server error occurred.",
                 errors = (IReadOnlyCollection<string>?)null
             }
         };

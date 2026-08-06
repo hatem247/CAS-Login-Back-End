@@ -1,4 +1,5 @@
 using CAS_Login_Back_End.Data;
+using CAS_Login_Back_End.Data.Entities;
 using CAS_Login_Back_End.Exceptions;
 using CAS_Login_Back_End.Models.Responses;
 using CAS_Login_Back_End.Services.Interfaces;
@@ -26,12 +27,11 @@ public class RoleService : IRoleService
     {
         var roles = await _dbContext.Roles
             .AsNoTracking()
-            .Where(r => r.IsActive)
             .Select(r => new RoleResponse
             {
-                RoleId = r.RoleId,
-                Name = r.Name,
-                Description = r.Description
+                RoleId = checked((int)r.Id),
+                Name = r.RoleName,
+                Description = r.BusinessEntity ?? string.Empty
             })
             .ToListAsync(cancellationToken);
 
@@ -42,7 +42,7 @@ public class RoleService : IRoleService
     {
         var role = await _dbContext.Roles
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.RoleId == roleId && r.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == roleId, cancellationToken);
 
         if (role is null)
         {
@@ -51,35 +51,49 @@ public class RoleService : IRoleService
 
         return new RoleResponse
         {
-            RoleId = role.RoleId,
-            Name = role.Name,
-            Description = role.Description
+            RoleId = checked((int)role.Id),
+            Name = role.RoleName,
+            Description = role.BusinessEntity ?? string.Empty
         };
     }
 
     public async Task<RoleResponse> GetAccountRoleAsync(
         int accountId,
-        int businessEntityId,
+        string businessEntityName,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(businessEntityName))
+        {
+            throw new NotFoundException("Business entity name is required.");
+        }
+
         var accountRole = await _dbContext.AccountRoles
             .AsNoTracking()
-            .Include(ar => ar.Role)
             .FirstOrDefaultAsync(
-                ar => ar.AccountId == accountId && ar.BusinessEntityId == businessEntityId,
+                ar => ar.AccountId == accountId && ar.BusinessEntityName == businessEntityName,
                 cancellationToken);
 
-        if (accountRole is null || accountRole.Role is null)
+        if (accountRole is null || accountRole.RoleId is null)
         {
             throw new NotFoundException(
-                $"No role found for account {accountId} in business entity {businessEntityId}.");
+                $"No role found for account {accountId} in business entity '{businessEntityName}'.");
+        }
+
+        var role = await _dbContext.Roles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == accountRole.RoleId.Value, cancellationToken);
+
+        if (role is null)
+        {
+            throw new NotFoundException(
+                $"No role found for account {accountId} in business entity '{businessEntityName}'.");
         }
 
         return new RoleResponse
         {
-            RoleId = accountRole.Role.RoleId,
-            Name = accountRole.Role.Name,
-            Description = accountRole.Role.Description
+            RoleId = checked((int)role.Id),
+            Name = role.RoleName,
+            Description = role.BusinessEntity ?? string.Empty
         };
     }
 }

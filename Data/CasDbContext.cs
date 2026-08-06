@@ -1,165 +1,142 @@
-using CAS_Login_Back_End.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using CAS_Login_Back_End.Data.Entities;
 
-namespace CAS_Login_Back_End.Data;
-
-/// <summary>
-/// Entity Framework Core DbContext for CAS API.
-/// Configures entities, relationships, and constraints.
-/// </summary>
-public class CasDbContext : DbContext
+namespace CAS_Login_Back_End.Data
 {
-    public CasDbContext(DbContextOptions<CasDbContext> options) : base(options)
+    public class CasDbContext : DbContext
     {
-    }
+        public CasDbContext(DbContextOptions<CasDbContext> options) : base(options) { }
 
-    public DbSet<Account> Accounts { get; set; }
+        public DbSet<Account> Accounts { get; set; } = null!;
+        public DbSet<Login> Logins { get; set; } = null!;
+        public DbSet<Role> Roles { get; set; } = null!;
+        public DbSet<AccountRole> AccountRoles { get; set; } = null!;
 
-    public DbSet<Login> Logins { get; set; }
-
-    public DbSet<Role> Roles { get; set; }
-
-    public DbSet<AccountRole> AccountRoles { get; set; }
-
-    public DbSet<BusinessEntity> BusinessEntities { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-
-        // Account configuration
-        modelBuilder.Entity<Account>(entity =>
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            entity.HasKey(e => e.AccountId);
+            // The existing SQL Server schema uses singular names for these tables.
+            // DbSet names are plural, so configure the physical table names explicitly.
+            modelBuilder.Entity<Account>(entity =>
+            {
+                entity.ToTable("Account", "dbo");
+                entity.Property(e => e.FullNameEn).HasColumnName("FullNameEN");
+                entity.Property(e => e.FullNameAr).HasColumnName("FullNameAR");
+                entity.Property(e => e.CreatedAt).HasColumnName("Created_at");
+            });
+            modelBuilder.Entity<Login>().ToTable("Login", "dbo");
+            modelBuilder.Entity<Role>().ToTable("Roles", "dbo");
 
-            entity.Property(e => e.Email)
-                .IsRequired()
-                .HasMaxLength(256);
+            modelBuilder.Entity<InterviewScore>(entity =>
+            {
+                entity.HasOne(d => d.Account)
+                    .WithMany(p => p.InterviewScoreAccounts)
+                    .HasForeignKey(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-            entity.Property(e => e.FullNameEn)
-                .IsRequired()
-                .HasMaxLength(256);
+                entity.HasOne(d => d.Interviewer)
+                    .WithMany(p => p.InterviewScoreInterviewers)
+                    .HasForeignKey(d => d.InterviewerId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.FullNameAr)
-                .IsRequired()
-                .HasMaxLength(256);
+            modelBuilder.Entity<Team>(entity =>
+            {
+                entity.HasOne(d => d.SupervisorAccount)
+                    .WithMany(p => p.TeamSupervisorAccounts)
+                    .HasForeignKey(d => d.SupervisorAccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true);
+                entity.HasOne(d => d.TeamLeaderAccount)
+                    .WithMany(p => p.TeamTeamLeaderAccounts)
+                    .HasForeignKey(d => d.TeamLeaderAccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
+            modelBuilder.Entity<AdmissionProfile>(entity =>
+            {
+                entity.HasKey(e => e.AccountId);
 
-            entity.HasIndex(e => e.Email)
-                .IsUnique();
-        });
+                entity.HasOne(d => d.Account)
+                    .WithOne(p => p.AdmissionProfile)
+                    .HasForeignKey<AdmissionProfile>(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-        // Login configuration
-        modelBuilder.Entity<Login>(entity =>
-        {
-            entity.HasKey(e => e.LoginId);
+                entity.HasOne(d => d.Status)
+                    .WithMany()
+                    .HasForeignKey(d => d.StatusId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.AccountId)
-                .IsRequired();
+            modelBuilder.Entity<CapstoneSupervisorExtension>(entity =>
+            {
+                entity.HasKey(e => e.AccountId);
 
-            entity.Property(e => e.PasswordHash)
-                .IsRequired()
-                .HasMaxLength(1024);
+                entity.HasOne(d => d.Account)
+                    .WithOne(p => p.CapstoneSupervisorExtension)
+                    .HasForeignKey<CapstoneSupervisorExtension>(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
+                entity.HasOne(d => d.Status)
+                    .WithMany(p => p.CapstoneSupervisorExtensions)
+                    .HasForeignKey(d => d.StatusId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.HasOne(e => e.Account)
-                .WithMany(a => a.Logins)
-                .HasForeignKey(e => e.AccountId)
-                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ReviewerSupervisorExtension>(entity =>
+            {
+                entity.HasKey(e => e.AccountId);
 
-            entity.HasIndex(e => e.AccountId);
-        });
+                entity.HasOne(d => d.Account)
+                    .WithOne(p => p.ReviewerSupervisorExtension)
+                    .HasForeignKey<ReviewerSupervisorExtension>(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-        // Role configuration
-        modelBuilder.Entity<Role>(entity =>
-        {
-            entity.HasKey(e => e.RoleId);
+                entity.HasOne(d => d.Status)
+                    .WithMany(p => p.ReviewerSupervisorExtensions)
+                    .HasForeignKey(d => d.StatusId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(128);
+            modelBuilder.Entity<SuperAdminExtension>(entity =>
+            {
+                entity.HasKey(e => e.AccountId);
 
-            entity.Property(e => e.Description)
-                .HasMaxLength(512);
+                entity.HasOne(d => d.Account)
+                    .WithOne(p => p.SuperAdminExtension)
+                    .HasForeignKey<SuperAdminExtension>(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true);
+                entity.HasOne(d => d.Status)
+                    .WithMany(p => p.SuperAdminExtensions)
+                    .HasForeignKey(d => d.StatusId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
+            modelBuilder.Entity<StudentExtension>(entity =>
+            {
+                entity.HasKey(e => e.AccountId);
 
-            entity.HasIndex(e => e.Name)
-                .IsUnique();
-        });
+                entity.HasOne(d => d.Account)
+                    .WithOne(p => p.StudentExtension)
+                    .HasForeignKey<StudentExtension>(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
 
-        // BusinessEntity configuration
-        modelBuilder.Entity<BusinessEntity>(entity =>
-        {
-            entity.HasKey(e => e.BusinessEntityId);
+                entity.HasOne(d => d.Status)
+                    .WithMany(p => p.StudentExtensions)
+                    .HasForeignKey(d => d.StatusId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.Name)
-                .IsRequired()
-                .HasMaxLength(256);
+            modelBuilder.Entity<StudentExamResult>(entity =>
+            {
+                entity.HasKey(e => e.AccountId);
 
-            entity.Property(e => e.Description)
-                .HasMaxLength(512);
+                entity.HasOne(d => d.Account)
+                    .WithOne(p => p.StudentExamResult)
+                    .HasForeignKey<StudentExamResult>(d => d.AccountId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
-            entity.Property(e => e.IsActive)
-                .HasDefaultValue(true);
-
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
-
-            entity.HasIndex(e => e.Name)
-                .IsUnique();
-        });
-
-        // AccountRole configuration
-        modelBuilder.Entity<AccountRole>(entity =>
-        {
-            entity.HasKey(e => e.AccountRoleId);
-
-            entity.Property(e => e.AccountId)
-                .IsRequired();
-
-            entity.Property(e => e.RoleId)
-                .IsRequired();
-
-            entity.Property(e => e.BusinessEntityId)
-                .IsRequired();
-
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("GETUTCDATE()");
-
-            // Relationships
-            entity.HasOne(e => e.Account)
-                .WithMany(a => a.AccountRoles)
-                .HasForeignKey(e => e.AccountId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Role)
-                .WithMany(r => r.AccountRoles)
-                .HasForeignKey(e => e.RoleId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.BusinessEntity)
-                .WithMany(be => be.AccountRoles)
-                .HasForeignKey(e => e.BusinessEntityId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Unique constraint: One role per account per business entity
-            entity.HasIndex(e => new { e.AccountId, e.BusinessEntityId })
-                .IsUnique();
-
-            entity.HasIndex(e => e.RoleId);
-            entity.HasIndex(e => e.BusinessEntityId);
-        });
+        }
     }
 }

@@ -1,15 +1,12 @@
 namespace CAS_Login_Back_End.Models.Responses;
 
-/// <summary>
-/// Response model for token validation.
-/// </summary>
-public class ValidateTokenResponse
+public sealed class ValidateTokenResponse
 {
-    public bool IsValid { get; set; }
+    public bool IsValid { get; init; }
 
-    public int? AccountId { get; set; }
+    public bool IsExpired { get; init; }
 
-    public string? TokenType { get; set; }
+    public string TokenType { get; init; } = string.Empty;
 
-    public DateTime? ExpiresAt { get; set; }
+    public long AccountId { get; init; }
 }

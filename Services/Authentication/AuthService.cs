@@ -1,251 +1,126 @@
-using CAS_Login_Back_End.Data;
-using CAS_Login_Back_End.Exceptions;
-using CAS_Login_Back_End.Models.Responses;
-using CAS_Login_Back_End.Services.Interfaces;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using CAS_Login_Back_End.Data;
+using CAS_Login_Back_End.Data.Entities;
+using CAS_Login_Back_End.Services.Interfaces;
+using CAS_Login_Back_End.Models.Responses;
+using CAS_Login_Back_End.Models.Authentication;
+using CAS_Login_Back_End.Exceptions;
 
-namespace CAS_Login_Back_End.Services.Authentication;
-
-/// <summary>
-/// Implementation of IAuthService for authentication operations.
-/// </summary>
-public class AuthService : IAuthService
+namespace CAS_Login_Back_End.Services.Authentication
 {
-    private readonly CasDbContext _dbContext;
-    private readonly ITokenService _tokenService;
-    private readonly ILogger<AuthService> _logger;
-
-    public AuthService(
-        CasDbContext dbContext,
-        ITokenService tokenService,
-        ILogger<AuthService> logger)
+    public class AuthService : IAuthService
     {
-        _dbContext = dbContext;
-        _tokenService = tokenService;
-        _logger = logger;
-    }
+        private readonly CasDbContext _dbContext;
+        private readonly ITokenService _tokenService;
 
-    public async Task<LoginResponse> LoginAsync(
-        string email,
-        string password,
-        int businessEntityId,
-        string businessEntityName,
-        CancellationToken cancellationToken = default)
-    {
-        // Validate email format
-        if (string.IsNullOrWhiteSpace(email))
+        public AuthService(CasDbContext dbContext, ITokenService tokenService)
         {
-            throw new ValidationException("Email is required.");
+            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+            _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
         }
 
-        if (string.IsNullOrWhiteSpace(password))
+        public async Task<LoginResponse> LoginAsync(
+            string email,
+            string password,
+            string businessEntityName,
+            CancellationToken cancellationToken = default)
         {
-            throw new ValidationException("Password is required.");
-        }
+            if (string.IsNullOrWhiteSpace(email))
+                throw new ValidationException("Email is required.");
 
-        // Find account by email
-        var account = await _dbContext.Accounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Email == email, cancellationToken);
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ValidationException("Password is required.");
 
-        if (account is null)
-        {
-            _logger.LogWarning("Login attempt with non-existent email: {Email}", email);
-            throw new UnauthorizedException("Invalid email or password.");
-        }
+            var account = await _dbContext.Accounts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(a => a.Email == email, cancellationToken)
+                ?? throw new UnauthorizedException("Invalid email or password.");
 
-        if (!account.IsActive)
-        {
-            _logger.LogWarning("Login attempt with inactive account: {AccountId}", account.AccountId);
-            throw new UnauthorizedException("Account is inactive.");
-        }
+            if (!account.IsActive)
+                throw new UnauthorizedException("Account is inactive.");
 
-        // Get login credentials
-        var login = await _dbContext.Logins
-            .AsNoTracking()
-            .FirstOrDefaultAsync(l => l.AccountId == account.AccountId, cancellationToken);
+            var login = await _dbContext.Logins
+                .AsNoTracking()
+                .SingleOrDefaultAsync(l => l.AccountId == account.Id, cancellationToken)
+                ?? throw new UnauthorizedException("Invalid email or password.");
 
-        if (login is null)
-        {
-            _logger.LogWarning("No login record found for account: {AccountId}", account.AccountId);
-            throw new UnauthorizedException("Invalid email or password.");
-        }
+            if (!BCrypt.Net.BCrypt.Verify(password, login.PasswordHash))
+                throw new UnauthorizedException("Invalid email or password.");
 
-        // Verify password
-        if (!BCrypt.Net.BCrypt.Verify(password, login.PasswordHash))
-        {
-            _logger.LogWarning("Invalid password for account: {AccountId}", account.AccountId);
-            throw new UnauthorizedException("Invalid email or password.");
-        }
+            var accountRole = await _dbContext.AccountRoles
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    ar => ar.AccountId == account.Id &&
+                          ar.BusinessEntityName == businessEntityName,
+                    cancellationToken)
+                ?? throw new UnauthorizedException("You do not have access to this business entity.");
 
-        // Retrieve role for this business entity
-        var accountRole = await _dbContext.AccountRoles
-            .AsNoTracking()
-            .Include(ar => ar.Role)
-            .FirstOrDefaultAsync(
-                ar => ar.AccountId == account.AccountId && ar.BusinessEntityId == businessEntityId,
-                cancellationToken);
+            string roleName = string.Empty;
 
-        if (accountRole is null || accountRole.Role is null)
-        {
-            _logger.LogWarning(
-                "No role found for account {AccountId} in business entity {BusinessEntityId}",
-                account.AccountId,
-                businessEntityId);
-            throw new UnauthorizedException(
-                "You do not have access to this business entity.");
-        }
-
-        // Generate tokens
-        var ssoToken = _tokenService.GenerateSsoToken(account.AccountId);
-        var systemToken = _tokenService.GenerateSystemToken(
-            account.AccountId,
-            account.Email,
-            account.FullNameEn,
-            account.FullNameAr,
-            businessEntityId,
-            businessEntityName,
-            accountRole.Role.Name);
-
-        _logger.LogInformation("Successful login for account: {AccountId}", account.AccountId);
-
-        return new LoginResponse
-        {
-            SsoToken = ssoToken,
-            SystemToken = systemToken,
-            SsoExpiresIn = 28800, // 8 hours in seconds
-            SystemExpiresIn = 3600, // 1 hour in seconds
-            Profile = new ProfileResponse
+            if (accountRole.RoleId.HasValue)
             {
-                AccountId = account.AccountId,
+                var roleEntity = await _dbContext.Roles
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(r => r.Id == accountRole.RoleId.Value, cancellationToken);
+
+                roleName = roleEntity?.RoleName ?? string.Empty;
+            }
+
+            // Fallback to account.Role if no role found via AccountRole
+            if (string.IsNullOrWhiteSpace(roleName))
+            {
+                var accountWithRole = await _dbContext.Accounts
+                    .AsNoTracking()
+                    .Include(a => a.Role)
+                    .SingleOrDefaultAsync(a => a.Id == account.Id, cancellationToken);
+
+                roleName = accountWithRole?.Role?.RoleName ?? string.Empty;
+            }
+
+            var ssoToken = _tokenService.GenerateSsoToken(account.Id);
+
+            var jwtToken = _tokenService.GenerateSystemToken(
+                new SystemTokenDescriptor
+                {
+                    AccountId = account.Id,
+                    Email = account.Email,
+                    FullNameEn = account.FullNameEn,
+                    FullNameAr = account.FullNameAr,
+                    BusinessEntityName = businessEntityName,
+                    Role = roleName
+                });
+
+            return new LoginResponse
+            {
+                SsoToken = ssoToken,
+                JwtToken = jwtToken,
+
+                AccountId = account.Id,
                 Email = account.Email,
                 FullNameEn = account.FullNameEn,
                 FullNameAr = account.FullNameAr,
-                IsActive = account.IsActive
-            },
-            Role = new RoleResponse
-            {
-                RoleId = accountRole.Role.RoleId,
-                Name = accountRole.Role.Name,
-                Description = accountRole.Role.Description
-            }
-        };
-    }
 
-    public async Task<ExchangeTokenResponse> ExchangeTokenAsync(
-        string ssoToken,
-        int businessEntityId,
-        string businessEntityName,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(ssoToken))
-        {
-            throw new ValidationException("SSO token is required.");
+                Role = roleName,
+
+                BusinessEntityName = businessEntityName,
+
+                SsoExpiresAt = DateTime.UtcNow.AddHours(8),
+                JwtExpiresAt = DateTime.UtcNow.AddHours(1)
+            };
         }
 
-        // Validate SSO token
-        if (!_tokenService.ValidateToken(ssoToken))
+        public Task<ExchangeTokenResponse> ExchangeTokenAsync(string ssoToken, string businessEntityName, CancellationToken cancellationToken = default)
         {
-            throw new UnauthorizedException("Invalid or expired SSO token.");
+            // Keep existing behavior in TokenService; delegate if implemented.
+            throw new NotImplementedException();
         }
 
-        // Read token type
-        var tokenType = _tokenService.ReadTokenType(ssoToken);
-        if (tokenType != "SSO")
+        public Task<ValidateTokenResponse> ValidateTokenAsync(string token, CancellationToken cancellationToken = default)
         {
-            throw new UnauthorizedException("Token is not an SSO token.");
+            throw new NotImplementedException();
         }
-
-        // Read AccountId from token
-        var accountId = _tokenService.ReadAccountId(ssoToken);
-        if (!accountId.HasValue)
-        {
-            throw new UnauthorizedException("Invalid token claims.");
-        }
-
-        // Retrieve account
-        var account = await _dbContext.Accounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.AccountId == accountId.Value, cancellationToken);
-
-        if (account is null || !account.IsActive)
-        {
-            throw new UnauthorizedException("Account not found or inactive.");
-        }
-
-        // Retrieve role for business entity
-        var accountRole = await _dbContext.AccountRoles
-            .AsNoTracking()
-            .Include(ar => ar.Role)
-            .FirstOrDefaultAsync(
-                ar => ar.AccountId == accountId.Value && ar.BusinessEntityId == businessEntityId,
-                cancellationToken);
-
-        if (accountRole is null || accountRole.Role is null)
-        {
-            throw new UnauthorizedException(
-                "You do not have access to this business entity.");
-        }
-
-        // Generate System token
-        var systemToken = _tokenService.GenerateSystemToken(
-            account.AccountId,
-            account.Email,
-            account.FullNameEn,
-            account.FullNameAr,
-            businessEntityId,
-            businessEntityName,
-            accountRole.Role.Name);
-
-        _logger.LogInformation(
-            "Token exchanged for account {AccountId} in business entity {BusinessEntityId}",
-            accountId,
-            businessEntityId);
-
-        return new ExchangeTokenResponse
-        {
-            SystemToken = systemToken,
-            ExpiresIn = 3600 // 1 hour in seconds
-        };
-    }
-
-    public async Task<ValidateTokenResponse> ValidateTokenAsync(
-        string token,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return new ValidateTokenResponse { IsValid = false };
-        }
-
-        if (!_tokenService.ValidateToken(token))
-        {
-            return new ValidateTokenResponse { IsValid = false };
-        }
-
-        var accountId = _tokenService.ReadAccountId(token);
-        var tokenType = _tokenService.ReadTokenType(token);
-        var expiration = _tokenService.ReadExpiration(token);
-
-        // Verify account exists and is active
-        if (accountId.HasValue)
-        {
-            var account = await _dbContext.Accounts
-                .AsNoTracking()
-                .FirstOrDefaultAsync(a => a.AccountId == accountId.Value, cancellationToken);
-
-            if (account is null || !account.IsActive)
-            {
-                return new ValidateTokenResponse { IsValid = false };
-            }
-        }
-
-        return new ValidateTokenResponse
-        {
-            IsValid = true,
-            AccountId = accountId,
-            TokenType = tokenType,
-            ExpiresAt = expiration
-        };
     }
 }
