@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using CAS_Login_Back_End.Data;
-using CAS_Login_Back_End.Data.Entities;
 using CAS_Login_Back_End.Services.Interfaces;
 using CAS_Login_Back_End.Models.Responses;
 using CAS_Login_Back_End.Models.Authentication;
@@ -19,11 +18,16 @@ namespace CAS_Login_Back_End.Services.Authentication
     {
         private readonly CasDbContext _dbContext;
         private readonly ITokenService _tokenService;
+        private readonly IAccountIdentityService _accountIdentityService;
 
-        public AuthService(CasDbContext dbContext, ITokenService tokenService)
+        public AuthService(
+            CasDbContext dbContext,
+            ITokenService tokenService,
+            IAccountIdentityService accountIdentityService)
         {
             _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
+            _accountIdentityService = accountIdentityService ?? throw new ArgumentNullException(nameof(accountIdentityService));
         }
 
         public async Task<LoginResponse> LoginAsync(
@@ -38,41 +42,21 @@ namespace CAS_Login_Back_End.Services.Authentication
             if (string.IsNullOrWhiteSpace(password))
                 throw new ValidationException("Password is required.");
 
+            // Login is the single credential source. Profile data is resolved
+            // from Account_Info by the Login.AccountId after authentication.
             var login = await _dbContext.Logins
                 .AsNoTracking()
-                .Include(l => l.Account)
-                    .ThenInclude(a => a.StudentExtension)
                 .SingleOrDefaultAsync(l => l.Email == email, cancellationToken);
 
-            Account account;
-            string credentialEmail;
-            string storedPasswordHash;
-            string credentialSource;
+            if (login is null)
+                throw new UnauthorizedException("Invalid email or password.");
 
-            if (login is not null)
-            {
-                // Student and other Login-backed accounts authenticate using Login.
-                account = login.Account;
-                credentialEmail = login.Email;
-                storedPasswordHash = login.PasswordHash;
-                credentialSource = "Login";
-            }
-            else
-            {
-                // Legacy accounts without a Login row authenticate using Account.
-                account = await _dbContext.Accounts
-                    .AsNoTracking()
-                    .SingleOrDefaultAsync(a => a.Email == email, cancellationToken)
-                    ?? throw new UnauthorizedException("Invalid email or password.");
-                credentialEmail = account.Email;
-                storedPasswordHash = account.PasswordHash;
-                credentialSource = "Account";
-            }
+            var account = await GetActiveAccountInfoAsync(login.AccountId, cancellationToken);
 
             if (!account.IsActive)
                 throw new UnauthorizedException("Account is inactive.");
 
-            if (!VerifyPassword(password, storedPasswordHash))
+            if (!VerifyPassword(password, login.PasswordHash))
                 throw new UnauthorizedException("Invalid email or password.");
 
             var accountRole = await _dbContext.AccountRoles
@@ -94,29 +78,24 @@ namespace CAS_Login_Back_End.Services.Authentication
                 roleName = roleEntity?.RoleName ?? string.Empty;
             }
 
-            // Fallback to account.Role if no role found via AccountRole
-            if (string.IsNullOrWhiteSpace(roleName))
-            {
-                var accountWithRole = await _dbContext.Accounts
-                    .AsNoTracking()
-                    .Include(a => a.Role)
-                    .SingleOrDefaultAsync(a => a.Id == account.Id, cancellationToken);
-
-                roleName = accountWithRole?.Role?.RoleName ?? string.Empty;
-            }
-
-            var ssoToken = _tokenService.GenerateSsoToken(account.Id, credentialSource);
+            var ssoToken = _tokenService.GenerateSsoToken(account.Id, account.NationalId);
 
             var jwtToken = _tokenService.GenerateSystemToken(
                 new SystemTokenDescriptor
                 {
                     AccountId = account.Id,
-                    Email = credentialEmail,
-                    FullNameEn = account.FullNameEn,
-                    FullNameAr = account.FullNameAr,
+                    Email = account.Email,
+                    NationalId = account.NationalId,
+                    Phone = account.Phone,
+                    City = account.City,
+                    FullNameEn = account.FullNameEn ?? string.Empty,
+                    FullNameAr = account.FullNameAr ?? string.Empty,
+                    CreatedAt = account.CreatedAt,
+                    IsActive = account.IsActive,
+                    StatusId = account.StatusId,
+                    GovernoratesId = account.GovernoratesId,
                     BusinessEntityName = businessEntityName,
-                    Role = roleName,
-                    CredentialSource = credentialSource
+                    Role = roleName
                 });
 
             return new LoginResponse
@@ -125,9 +104,9 @@ namespace CAS_Login_Back_End.Services.Authentication
                 JwtToken = jwtToken,
 
                 AccountId = account.Id,
-                Email = credentialEmail,
-                FullNameEn = account.FullNameEn,
-                FullNameAr = account.FullNameAr,
+                Email = account.Email,
+                FullNameEn = account.FullNameEn ?? string.Empty,
+                FullNameAr = account.FullNameAr ?? string.Empty,
 
                 Role = roleName,
 
@@ -163,17 +142,16 @@ namespace CAS_Login_Back_End.Services.Authentication
             if (!string.Equals(principal.FindFirst("TokenType")?.Value, "SSO", StringComparison.Ordinal))
                 throw new UnauthorizedException("Token is not an SSO token.");
 
-            var accountIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!long.TryParse(accountIdClaim, out var accountId))
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(principal, cancellationToken);
+            if (!accountId.HasValue)
                 throw new UnauthorizedException("Invalid SSO token claims.");
 
-            var account = await _dbContext.Accounts
+            var login = await _dbContext.Logins
                 .AsNoTracking()
-                .SingleOrDefaultAsync(a => a.Id == accountId, cancellationToken)
-                ?? throw new UnauthorizedException("Account not found or inactive.");
+                .SingleOrDefaultAsync(login => login.AccountId == accountId.Value, cancellationToken)
+                ?? throw new UnauthorizedException("Login record not found.");
 
-            if (!account.IsActive)
-                throw new UnauthorizedException("Account not found or inactive.");
+            var account = await GetActiveAccountInfoAsync(login.AccountId, cancellationToken);
 
             var accountRole = await _dbContext.AccountRoles
                 .AsNoTracking()
@@ -194,41 +172,21 @@ namespace CAS_Login_Back_End.Services.Authentication
                     ?? string.Empty;
             }
 
-            if (string.IsNullOrWhiteSpace(roleName))
-            {
-                roleName = await _dbContext.Accounts
-                    .AsNoTracking()
-                    .Where(a => a.Id == account.Id)
-                    .Select(a => a.Role.RoleName)
-                    .SingleOrDefaultAsync(cancellationToken)
-                    ?? string.Empty;
-            }
-
-            var credentialSource = string.Equals(
-                principal.FindFirst("CredentialSource")?.Value,
-                "Account",
-                StringComparison.Ordinal)
-                ? "Account"
-                : "Login";
-
-            var email = credentialSource == "Account"
-                ? account.Email
-                : await _dbContext.Logins
-                    .AsNoTracking()
-                    .Where(login => login.AccountId == account.Id)
-                    .Select(login => login.Email)
-                    .SingleOrDefaultAsync(cancellationToken)
-                    ?? account.Email;
-
             var jwtToken = _tokenService.GenerateSystemToken(new SystemTokenDescriptor
             {
                 AccountId = account.Id,
-                Email = email,
-                FullNameEn = account.FullNameEn,
-                FullNameAr = account.FullNameAr,
+                Email = account.Email,
+                NationalId = account.NationalId,
+                Phone = account.Phone,
+                City = account.City,
+                FullNameEn = account.FullNameEn ?? string.Empty,
+                FullNameAr = account.FullNameAr ?? string.Empty,
+                CreatedAt = account.CreatedAt,
+                IsActive = account.IsActive,
+                StatusId = account.StatusId,
+                GovernoratesId = account.GovernoratesId,
                 BusinessEntityName = businessEntityName,
-                Role = roleName,
-                CredentialSource = credentialSource
+                Role = roleName
             });
 
             return new ExchangeTokenResponse
@@ -262,15 +220,8 @@ namespace CAS_Login_Back_End.Services.Authentication
                 return new ValidateTokenResponse { IsValid = false };
             }
 
-            var accountIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!long.TryParse(accountIdClaim, out var accountId))
-                return new ValidateTokenResponse { IsValid = false };
-
-            var accountIsActive = await _dbContext.Accounts
-                .AsNoTracking()
-                .AnyAsync(account => account.Id == accountId && account.IsActive, cancellationToken);
-
-            if (!accountIsActive)
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(principal, cancellationToken);
+            if (!accountId.HasValue)
                 return new ValidateTokenResponse { IsValid = false };
 
             return new ValidateTokenResponse
@@ -278,7 +229,7 @@ namespace CAS_Login_Back_End.Services.Authentication
                 IsValid = true,
                 IsExpired = false,
                 TokenType = principal.FindFirst("TokenType")?.Value ?? string.Empty,
-                AccountId = accountId
+                AccountId = accountId.Value
             };
         }
 
@@ -299,6 +250,21 @@ namespace CAS_Login_Back_End.Services.Authentication
 
             return enteredValue.Length == storedValue.Length &&
                 CryptographicOperations.FixedTimeEquals(enteredValue, storedValue);
+        }
+
+        private async Task<Data.Entities.AccountInfo> GetActiveAccountInfoAsync(
+            long accountId,
+            CancellationToken cancellationToken)
+        {
+            var account = await _dbContext.AccountInfos
+                .AsNoTracking()
+                .SingleOrDefaultAsync(account => account.Id == accountId, cancellationToken)
+                ?? throw new UnauthorizedException("Account profile not found.");
+
+            if (!account.IsActive)
+                throw new UnauthorizedException("Account is inactive.");
+
+            return account;
         }
     }
 }

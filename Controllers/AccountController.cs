@@ -1,6 +1,7 @@
 using CAS_Login_Back_End.Models.Common;
 using CAS_Login_Back_End.Models.Requests;
 using CAS_Login_Back_End.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CAS_Login_Back_End.Controllers;
@@ -10,14 +11,20 @@ namespace CAS_Login_Back_End.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "SystemToken")]
 public class AccountController : ControllerBase
 {
     private readonly IAccountService _accountService;
+    private readonly IAccountIdentityService _accountIdentityService;
     private readonly ILogger<AccountController> _logger;
 
-    public AccountController(IAccountService accountService, ILogger<AccountController> logger)
+    public AccountController(
+        IAccountService accountService,
+        IAccountIdentityService accountIdentityService,
+        ILogger<AccountController> logger)
     {
         _accountService = accountService;
+        _accountIdentityService = accountIdentityService;
         _logger = logger;
     }
 
@@ -28,6 +35,7 @@ public class AccountController : ControllerBase
     /// POST /api/account/register
     /// </remarks>
     [HttpPost("register")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<dynamic>>> RegisterAsync(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken = default)
@@ -58,14 +66,13 @@ public class AccountController : ControllerBase
     {
         try
         {
-            var accountIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (accountIdClaim is null || !int.TryParse(accountIdClaim.Value, out var accountId))
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(User, cancellationToken);
+            if (!accountId.HasValue || accountId.Value > int.MaxValue)
             {
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var credentialSource = User.FindFirst("CredentialSource")?.Value ?? "Login";
-            var result = await _accountService.GetProfileAsync(accountId, credentialSource, cancellationToken);
+            var result = await _accountService.GetProfileAsync((int)accountId.Value, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Profile retrieved successfully."));
         }
         catch (Exception ex)
@@ -89,14 +96,13 @@ public class AccountController : ControllerBase
     {
         try
         {
-            var accountIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (accountIdClaim is null || !int.TryParse(accountIdClaim.Value, out var accountId))
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(User, cancellationToken);
+            if (!accountId.HasValue || accountId.Value > int.MaxValue)
             {
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var credentialSource = User.FindFirst("CredentialSource")?.Value ?? "Login";
-            var result = await _accountService.UpdateProfileAsync(accountId, request, credentialSource, cancellationToken);
+            var result = await _accountService.UpdateProfileAsync((int)accountId.Value, request, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Profile updated successfully."));
         }
         catch (Exception ex)
@@ -120,13 +126,13 @@ public class AccountController : ControllerBase
     {
         try
         {
-            var accountIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (accountIdClaim is null || !int.TryParse(accountIdClaim.Value, out var accountId))
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(User, cancellationToken);
+            if (!accountId.HasValue || accountId.Value > int.MaxValue)
             {
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            await _accountService.ChangePasswordAsync(accountId, request, cancellationToken);
+            await _accountService.ChangePasswordAsync((int)accountId.Value, request, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(null, "Password changed successfully."));
         }
         catch (Exception ex)
@@ -143,6 +149,7 @@ public class AccountController : ControllerBase
     /// POST /api/account/forgot-password
     /// </remarks>
     [HttpPost("forgot-password")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<dynamic>>> ForgotPasswordAsync(
         [FromBody] ForgotPasswordRequest request,
         CancellationToken cancellationToken = default)
@@ -166,6 +173,7 @@ public class AccountController : ControllerBase
     /// POST /api/account/reset-password
     /// </remarks>
     [HttpPost("reset-password")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<dynamic>>> ResetPasswordAsync(
         [FromBody] ResetPasswordRequest request,
         CancellationToken cancellationToken = default)

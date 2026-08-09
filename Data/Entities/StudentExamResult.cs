@@ -15,5 +15,11 @@ public partial class StudentExamResult
 
     public int ExamSoftwareScore { get; set; }
 
+    public int? ExamIqscore { get; set; }
+
+    public DateTime? ExamStartedAtUtc { get; set; }
+
+    public int? ExtensionMinutes { get; set; }
+
     public virtual Account Account { get; set; } = null!;
 }

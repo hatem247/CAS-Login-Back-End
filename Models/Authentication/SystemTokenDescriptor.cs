@@ -6,13 +6,26 @@ public sealed class SystemTokenDescriptor
 
     public string Email { get; init; } = string.Empty;
 
+    public string NationalId { get; init; } = string.Empty;
+
+    public string? Phone { get; init; }
+
+    public string? City { get; init; }
+
     public string FullNameEn { get; init; } = string.Empty;
 
     public string FullNameAr { get; init; } = string.Empty;
+
+    public DateOnly? CreatedAt { get; init; }
+
+    public bool IsActive { get; init; }
+
+    public long StatusId { get; init; }
+
+    public long? GovernoratesId { get; init; }
 
     public string BusinessEntityName { get; init; } = string.Empty;
 
     public string Role { get; init; } = string.Empty;
 
-    public string CredentialSource { get; init; } = string.Empty;
 }

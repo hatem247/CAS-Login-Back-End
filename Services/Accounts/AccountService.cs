@@ -31,19 +31,20 @@ public class AccountService : IAccountService
         // Validate request
         ValidateRegisterRequest(request);
 
-        // Check if email already exists
-        var existingAccount = await _dbContext.Accounts
+        // Login owns credentials, including the unique sign-in email.
+        var existingLogin = await _dbContext.Logins
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Email == request.Email, cancellationToken);
+            .FirstOrDefaultAsync(login => login.Email == request.Email, cancellationToken);
 
-        if (existingAccount is not null)
+        if (existingLogin is not null)
         {
             throw new ValidationException("Email is already registered.");
         }
 
-        // Create account
-        var account = new Account
+        // Create the profile in Account_Info. Login remains the credential record.
+        var account = new AccountInfo
         {
+            NationalId = request.NationalId,
             Email = request.Email,
             FullNameEn = request.FullNameEn,
             FullNameAr = request.FullNameAr,
@@ -51,7 +52,7 @@ public class AccountService : IAccountService
             CreatedAt = DateOnly.FromDateTime(DateTime.UtcNow)
         };
 
-        _dbContext.Accounts.Add(account);
+        _dbContext.AccountInfos.Add(account);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Create login record with hashed password
@@ -68,46 +69,30 @@ public class AccountService : IAccountService
 
         _logger.LogInformation("New account registered: {AccountId} ({Email})", account.Id, account.Email);
 
-        return new ProfileResponse
-        {
-            AccountId = checked((int)account.Id),
-            Email = login.Email,
-            FullNameEn = account.FullNameEn,
-            FullNameAr = account.FullNameAr,
-            IsActive = account.IsActive
-        };
+        return await ToProfileResponseAsync(account, login, cancellationToken);
     }
 
     public async Task<ProfileResponse> GetProfileAsync(
         int accountId,
-        string credentialSource,
         CancellationToken cancellationToken = default)
     {
-        var account = await _dbContext.Accounts
+        var login = await _dbContext.Logins
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
+            .FirstOrDefaultAsync(login => login.AccountId == accountId, cancellationToken);
 
-        if (account is null)
+        if (login is null)
         {
-            throw new NotFoundException($"Account with ID {accountId} not found.");
+            throw new NotFoundException($"Login record for account {accountId} not found.");
         }
 
-        var email = await GetCredentialEmailAsync(account, credentialSource, cancellationToken);
+        var account = await GetAccountInfoAsync(login.AccountId, cancellationToken);
 
-        return new ProfileResponse
-        {
-            AccountId = checked((int)account.Id),
-            Email = email,
-            FullNameEn = account.FullNameEn,
-            FullNameAr = account.FullNameAr,
-            IsActive = account.IsActive
-        };
+        return await ToProfileResponseAsync(account, login, cancellationToken);
     }
 
     public async Task<ProfileResponse> UpdateProfileAsync(
         int accountId,
         UpdateProfileRequest request,
-        string credentialSource,
         CancellationToken cancellationToken = default)
     {
         // Validate request
@@ -121,14 +106,16 @@ public class AccountService : IAccountService
             throw new ValidationException("FullNameAr is required.");
         }
 
-        // Get account
-        var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
+        // Resolve the profile through Login.AccountId and Account_Info.
+        var login = await _dbContext.Logins
+            .FirstOrDefaultAsync(login => login.AccountId == accountId, cancellationToken);
 
-        if (account is null)
+        if (login is null)
         {
-            throw new NotFoundException($"Account with ID {accountId} not found.");
+            throw new NotFoundException($"Login record for account {accountId} not found.");
         }
+
+        var account = await GetAccountInfoAsync(login.AccountId, cancellationToken);
 
         // Update profile
         account.FullNameEn = request.FullNameEn;
@@ -138,16 +125,7 @@ public class AccountService : IAccountService
 
         _logger.LogInformation("Profile updated for account: {AccountId}", accountId);
 
-        var email = await GetCredentialEmailAsync(account, credentialSource, cancellationToken);
-
-        return new ProfileResponse
-        {
-            AccountId = checked((int)account.Id),
-            Email = email,
-            FullNameEn = account.FullNameEn,
-            FullNameAr = account.FullNameAr,
-            IsActive = account.IsActive
-        };
+        return await ToProfileResponseAsync(account, login, cancellationToken);
     }
 
     public async Task ChangePasswordAsync(
@@ -203,11 +181,11 @@ public class AccountService : IAccountService
             throw new ValidationException("Email is required.");
         }
 
-        var account = await _dbContext.Accounts
+        var login = await _dbContext.Logins
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Email == request.Email, cancellationToken);
+            .FirstOrDefaultAsync(login => login.Email == request.Email, cancellationToken);
 
-        if (account is null)
+        if (login is null)
         {
             // For security, don't reveal if email exists
             _logger.LogWarning("Forgot password requested for non-existent email: {Email}", request.Email);
@@ -216,7 +194,7 @@ public class AccountService : IAccountService
 
         // TODO: Implement password reset token generation and email sending
         // For now, this is a placeholder
-        _logger.LogInformation("Forgot password initiated for account: {AccountId}", account.Id);
+        _logger.LogInformation("Forgot password initiated for account: {AccountId}", login.AccountId);
     }
 
     public async Task ResetPasswordAsync(
@@ -241,27 +219,19 @@ public class AccountService : IAccountService
         // TODO: Implement password reset token validation
         // For now, this is a placeholder
 
-        var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.Email == request.Email, cancellationToken);
-
-        if (account is null)
-        {
-            throw new NotFoundException($"Account with email {request.Email} not found.");
-        }
-
         var login = await _dbContext.Logins
-            .FirstOrDefaultAsync(l => l.AccountId == account.Id, cancellationToken);
+            .FirstOrDefaultAsync(login => login.Email == request.Email, cancellationToken);
 
         if (login is null)
         {
-            throw new NotFoundException($"Login record for account {account.Id} not found.");
+            throw new NotFoundException($"Login record with email {request.Email} not found.");
         }
 
         login.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Password reset for account: {AccountId}", account.Id);
+        _logger.LogInformation("Password reset for account: {AccountId}", login.AccountId);
     }
 
     private static void ValidateRegisterRequest(RegisterRequest request)
@@ -271,6 +241,11 @@ public class AccountService : IAccountService
         if (string.IsNullOrWhiteSpace(request.Email))
         {
             errors.Add("Email is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.NationalId))
+        {
+            errors.Add("NationalId is required.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Password))
@@ -299,22 +274,50 @@ public class AccountService : IAccountService
         }
     }
 
-    private async Task<string> GetCredentialEmailAsync(
-        Account account,
-        string credentialSource,
+    private async Task<AccountInfo> GetAccountInfoAsync(long accountId, CancellationToken cancellationToken)
+    {
+        return await _dbContext.AccountInfos
+            .SingleOrDefaultAsync(account => account.Id == accountId, cancellationToken)
+            ?? throw new NotFoundException($"Account_Info record for account {accountId} not found.");
+    }
+
+    private async Task<ProfileResponse> ToProfileResponseAsync(
+        AccountInfo account,
+        Login login,
         CancellationToken cancellationToken)
     {
-        if (string.Equals(credentialSource, "Account", StringComparison.Ordinal))
-            return account.Email;
-
-        var email = await _dbContext.Logins
+        var statusName = await _dbContext.Statuses
             .AsNoTracking()
-            .Where(login => login.AccountId == account.Id)
-            .Select(login => login.Email)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Where(status => status.Id == account.StatusId)
+            .Select(status => status.StatusName)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? string.Empty;
 
-        return !string.IsNullOrWhiteSpace(email)
-            ? email
-            : throw new NotFoundException($"Login email for account {account.Id} not found.");
+        var governorate = account.GovernoratesId.HasValue
+            ? await _dbContext.Governorates
+                .AsNoTracking()
+                .Where(item => item.Id == account.GovernoratesId.Value)
+                .Select(item => new { item.GovernorateNameEn, item.GovernorateNameAr })
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
+
+        return new ProfileResponse
+        {
+            AccountId = checked((int)account.Id),
+            Email = account.Email,
+            NationalId = account.NationalId,
+            Phone = account.Phone,
+            City = account.City,
+            FullNameEn = account.FullNameEn ?? string.Empty,
+            FullNameAr = account.FullNameAr ?? string.Empty,
+            IsActive = account.IsActive,
+            CreatedAt = account.CreatedAt,
+            StatusId = account.StatusId,
+            StatusName = statusName,
+            GovernoratesId = account.GovernoratesId,
+            GovernorateNameEn = governorate?.GovernorateNameEn,
+            GovernorateNameAr = governorate?.GovernorateNameAr
+        };
     }
+
 }

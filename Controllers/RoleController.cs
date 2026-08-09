@@ -1,5 +1,6 @@
 using CAS_Login_Back_End.Models.Common;
 using CAS_Login_Back_End.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CAS_Login_Back_End.Controllers;
@@ -9,14 +10,20 @@ namespace CAS_Login_Back_End.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "SystemToken")]
 public class RoleController : ControllerBase
 {
     private readonly IRoleService _roleService;
+    private readonly IAccountIdentityService _accountIdentityService;
     private readonly ILogger<RoleController> _logger;
 
-    public RoleController(IRoleService roleService, ILogger<RoleController> logger)
+    public RoleController(
+        IRoleService roleService,
+        IAccountIdentityService accountIdentityService,
+        ILogger<RoleController> logger)
     {
         _roleService = roleService;
+        _accountIdentityService = accountIdentityService;
         _logger = logger;
     }
 
@@ -80,13 +87,13 @@ public class RoleController : ControllerBase
     {
         try
         {
-            var accountIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (accountIdClaim is null || !int.TryParse(accountIdClaim.Value, out var accountId))
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(User, cancellationToken);
+            if (!accountId.HasValue || accountId.Value > int.MaxValue)
             {
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var result = await _roleService.GetAccountRoleAsync(accountId, businessEntityName, cancellationToken);
+            var result = await _roleService.GetAccountRoleAsync((int)accountId.Value, businessEntityName, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Role retrieved successfully."));
         }
         catch (Exception ex)

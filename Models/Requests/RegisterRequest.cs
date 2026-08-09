@@ -5,6 +5,8 @@ namespace CAS_Login_Back_End.Models.Requests;
 /// </summary>
 public class RegisterRequest
 {
+    public string NationalId { get; set; } = string.Empty;
+
     public string Email { get; set; } = string.Empty;
 
     public string Password { get; set; } = string.Empty;

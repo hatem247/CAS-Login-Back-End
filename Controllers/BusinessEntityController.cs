@@ -1,5 +1,6 @@
 using CAS_Login_Back_End.Models.Common;
 using CAS_Login_Back_End.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CAS_Login_Back_End.Controllers;
@@ -9,14 +10,20 @@ namespace CAS_Login_Back_End.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "SystemToken")]
 public class BusinessEntityController : ControllerBase
 {
     private readonly IBusinessEntityService _businessEntityService;
+    private readonly IAccountIdentityService _accountIdentityService;
     private readonly ILogger<BusinessEntityController> _logger;
 
-    public BusinessEntityController(IBusinessEntityService businessEntityService, ILogger<BusinessEntityController> logger)
+    public BusinessEntityController(
+        IBusinessEntityService businessEntityService,
+        IAccountIdentityService accountIdentityService,
+        ILogger<BusinessEntityController> logger)
     {
         _businessEntityService = businessEntityService;
+        _accountIdentityService = accountIdentityService;
         _logger = logger;
     }
 
@@ -78,13 +85,13 @@ public class BusinessEntityController : ControllerBase
     {
         try
         {
-            var accountIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (accountIdClaim is null || !int.TryParse(accountIdClaim.Value, out var accountId))
+            var accountId = await _accountIdentityService.ResolveAccountIdAsync(User, cancellationToken);
+            if (!accountId.HasValue || accountId.Value > int.MaxValue)
             {
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var result = await _businessEntityService.GetAccountBusinessEntitiesAsync(accountId, cancellationToken);
+            var result = await _businessEntityService.GetAccountBusinessEntitiesAsync((int)accountId.Value, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Business entities retrieved successfully."));
         }
         catch (Exception ex)

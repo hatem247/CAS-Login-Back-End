@@ -42,7 +42,7 @@ public sealed class AuthController : ControllerBase
     /// <summary>
     /// Exchanges a valid SSO token for a System JWT belonging to another Business Entity.
     /// </summary>
-    [HttpPost("exchange")]
+    [HttpPost("switch")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<dynamic>>> ExchangeTokenAsync(
         [FromBody] ExchangeTokenRequest request,

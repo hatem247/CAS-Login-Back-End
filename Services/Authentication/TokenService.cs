@@ -17,12 +17,12 @@ public sealed class TokenService : ITokenService
         _configuration = configuration;
     }
 
-    public string GenerateSsoToken(long accountId, string credentialSource)
+    public string GenerateSsoToken(long accountId, string nationalId)
     {
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, accountId.ToString()),
-            new("CredentialSource", credentialSource),
+            new("AccountId", accountId.ToString()),
+            new("NationalId", nationalId),
             new("TokenType", "SSO")
         };
 
@@ -33,17 +33,22 @@ public sealed class TokenService : ITokenService
     {
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, descriptor.AccountId.ToString()),
-            new(ClaimTypes.Email, descriptor.Email),
+            new("AccountId", descriptor.AccountId.ToString()),
+            new("Email", descriptor.Email),
+            new("NationalId", descriptor.NationalId),
+            new("Phone", descriptor.Phone ?? string.Empty),
+            new("City", descriptor.City ?? string.Empty),
 
             new("FullNameEn", descriptor.FullNameEn),
             new("FullNameAr", descriptor.FullNameAr),
+            new("CreatedAt", descriptor.CreatedAt?.ToString("O") ?? string.Empty),
+            new("IsActive", descriptor.IsActive.ToString()),
+            new("StatusId", descriptor.StatusId.ToString()),
+            new("GovernoratesId", descriptor.GovernoratesId?.ToString() ?? string.Empty),
 
             new("BusinessEntityName", descriptor.BusinessEntityName),
 
-            new(ClaimTypes.Role, descriptor.Role),
-
-            new("CredentialSource", descriptor.CredentialSource),
+            new("Role", descriptor.Role),
 
             new("TokenType", "System")
         };
@@ -88,7 +93,7 @@ public sealed class TokenService : ITokenService
     public long? ReadAccountId(string token)
     {
         var claim = GetPrincipal(token)
-            .FindFirst(ClaimTypes.NameIdentifier);
+            .FindFirst("AccountId");
 
         if (claim is null)
             return null;
