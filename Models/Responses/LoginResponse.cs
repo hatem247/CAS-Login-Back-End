@@ -20,5 +20,10 @@ public sealed class LoginResponse
 
     public DateTime SsoExpiresAt { get; init; }
 
+    /// <summary>
+    /// UTC time at which the system JWT was issued.
+    /// </summary>
+    public DateTime JwtCreatedAt { get; init; }
+
     public DateTime JwtExpiresAt { get; init; }
 }

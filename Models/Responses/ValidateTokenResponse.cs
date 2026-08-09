@@ -9,4 +9,9 @@ public sealed class ValidateTokenResponse
     public string TokenType { get; init; } = string.Empty;
 
     public long AccountId { get; init; }
+
+    /// <summary>
+    /// UTC time at which the system JWT was issued. SSO tokens do not contain this claim.
+    /// </summary>
+    public DateTime? CreatedAt { get; init; }
 }

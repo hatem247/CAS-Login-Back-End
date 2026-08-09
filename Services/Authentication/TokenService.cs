@@ -31,6 +31,8 @@ public sealed class TokenService : ITokenService
 
     public string GenerateSystemToken(SystemTokenDescriptor descriptor)
     {
+        var createdAt = descriptor.CreatedAt == default ? DateTime.UtcNow : descriptor.CreatedAt;
+
         var claims = new List<Claim>
         {
             new("AccountId", descriptor.AccountId.ToString()),
@@ -41,7 +43,8 @@ public sealed class TokenService : ITokenService
 
             new("FullNameEn", descriptor.FullNameEn),
             new("FullNameAr", descriptor.FullNameAr),
-            new("CreatedAt", descriptor.CreatedAt?.ToString("O") ?? string.Empty),
+            new("CreatedAt", createdAt.ToString("O")),
+            new("AccountCreatedAt", descriptor.AccountCreatedAt?.ToString("O") ?? string.Empty),
             new("IsActive", descriptor.IsActive.ToString()),
             new("StatusId", descriptor.StatusId.ToString()),
             new("GovernoratesId", descriptor.GovernoratesId?.ToString() ?? string.Empty),

@@ -16,7 +16,12 @@ public sealed class SystemTokenDescriptor
 
     public string FullNameAr { get; init; } = string.Empty;
 
-    public DateOnly? CreatedAt { get; init; }
+    public DateOnly? AccountCreatedAt { get; init; }
+
+    /// <summary>
+    /// UTC time at which this system JWT is issued.
+    /// </summary>
+    public DateTime CreatedAt { get; init; }
 
     public bool IsActive { get; init; }
 

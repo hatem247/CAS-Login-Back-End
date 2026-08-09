@@ -176,6 +176,11 @@
             Catches all application exceptions and returns standardized error responses.
             </summary>
         </member>
+        <member name="P:CAS_Login_Back_End.Models.Authentication.SystemTokenDescriptor.CreatedAt">
+            <summary>
+            UTC time at which this system JWT is issued.
+            </summary>
+        </member>
         <member name="T:CAS_Login_Back_End.Models.Requests.ChangePasswordRequest">
             <summary>
             Request model for password change.
@@ -211,6 +216,16 @@
             Request model for profile update.
             </summary>
         </member>
+        <member name="P:CAS_Login_Back_End.Models.Responses.ExchangeTokenResponse.JwtCreatedAt">
+            <summary>
+            UTC time at which the replacement system JWT was issued.
+            </summary>
+        </member>
+        <member name="P:CAS_Login_Back_End.Models.Responses.LoginResponse.JwtCreatedAt">
+            <summary>
+            UTC time at which the system JWT was issued.
+            </summary>
+        </member>
         <member name="T:CAS_Login_Back_End.Models.Responses.ProfileResponse">
             <summary>
             Response model for user profile information.
@@ -225,6 +240,11 @@
             <summary>
             Response model for token information.
             Does NOT expose the actual token value; tokens are returned at top level.
+            </summary>
+        </member>
+        <member name="P:CAS_Login_Back_End.Models.Responses.ValidateTokenResponse.CreatedAt">
+            <summary>
+            UTC time at which the system JWT was issued. SSO tokens do not contain this claim.
             </summary>
         </member>
         <member name="T:CAS_Login_Back_End.Services.Accounts.AccountService">

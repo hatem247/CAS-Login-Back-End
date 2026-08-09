@@ -9,4 +9,9 @@ public sealed class ExchangeTokenResponse
     public string BusinessEntityName { get; init; } = string.Empty;
 
     public DateTime JwtExpiresAt { get; init; }
+
+    /// <summary>
+    /// UTC time at which the replacement system JWT was issued.
+    /// </summary>
+    public DateTime JwtCreatedAt { get; init; }
 }

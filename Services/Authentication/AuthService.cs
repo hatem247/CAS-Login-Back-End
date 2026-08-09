@@ -80,6 +80,7 @@ namespace CAS_Login_Back_End.Services.Authentication
 
             var ssoToken = _tokenService.GenerateSsoToken(account.Id, account.NationalId);
 
+            var jwtCreatedAt = DateTime.UtcNow;
             var jwtToken = _tokenService.GenerateSystemToken(
                 new SystemTokenDescriptor
                 {
@@ -90,7 +91,8 @@ namespace CAS_Login_Back_End.Services.Authentication
                     City = account.City,
                     FullNameEn = account.FullNameEn ?? string.Empty,
                     FullNameAr = account.FullNameAr ?? string.Empty,
-                    CreatedAt = account.CreatedAt,
+                    AccountCreatedAt = account.CreatedAt,
+                    CreatedAt = jwtCreatedAt,
                     IsActive = account.IsActive,
                     StatusId = account.StatusId,
                     GovernoratesId = account.GovernoratesId,
@@ -113,6 +115,7 @@ namespace CAS_Login_Back_End.Services.Authentication
                 BusinessEntityName = businessEntityName,
 
                 SsoExpiresAt = DateTime.UtcNow.AddHours(8),
+                JwtCreatedAt = jwtCreatedAt,
                 JwtExpiresAt = DateTime.UtcNow.AddHours(1)
             };
         }
@@ -172,6 +175,7 @@ namespace CAS_Login_Back_End.Services.Authentication
                     ?? string.Empty;
             }
 
+            var jwtCreatedAt = DateTime.UtcNow;
             var jwtToken = _tokenService.GenerateSystemToken(new SystemTokenDescriptor
             {
                 AccountId = account.Id,
@@ -181,7 +185,8 @@ namespace CAS_Login_Back_End.Services.Authentication
                 City = account.City,
                 FullNameEn = account.FullNameEn ?? string.Empty,
                 FullNameAr = account.FullNameAr ?? string.Empty,
-                CreatedAt = account.CreatedAt,
+                AccountCreatedAt = account.CreatedAt,
+                CreatedAt = jwtCreatedAt,
                 IsActive = account.IsActive,
                 StatusId = account.StatusId,
                 GovernoratesId = account.GovernoratesId,
@@ -194,6 +199,7 @@ namespace CAS_Login_Back_End.Services.Authentication
                 JwtToken = jwtToken,
                 Role = roleName,
                 BusinessEntityName = businessEntityName,
+                JwtCreatedAt = jwtCreatedAt,
                 JwtExpiresAt = DateTime.UtcNow.AddHours(1)
             };
         }
@@ -229,7 +235,8 @@ namespace CAS_Login_Back_End.Services.Authentication
                 IsValid = true,
                 IsExpired = false,
                 TokenType = principal.FindFirst("TokenType")?.Value ?? string.Empty,
-                AccountId = accountId.Value
+                AccountId = accountId.Value,
+                CreatedAt = ReadCreatedAt(principal)
             };
         }
 
@@ -265,6 +272,19 @@ namespace CAS_Login_Back_End.Services.Authentication
                 throw new UnauthorizedException("Account is inactive.");
 
             return account;
+        }
+
+        private static DateTime? ReadCreatedAt(ClaimsPrincipal principal)
+        {
+            var createdAtValue = principal.FindFirst("CreatedAt")?.Value;
+
+            return DateTime.TryParse(
+                createdAtValue,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out var createdAt)
+                ? createdAt
+                : null;
         }
     }
 }
