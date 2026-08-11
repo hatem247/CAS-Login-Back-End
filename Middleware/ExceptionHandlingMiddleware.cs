@@ -57,7 +57,7 @@ public class ExceptionHandlingMiddleware
                 statusCode = StatusCodes.Status400BadRequest,
                 success = false,
                 message = ex.Message,
-                errors = ex.Errors
+                errors = (IReadOnlyCollection<string>?)ex.Errors
             },
             _ => new
             {

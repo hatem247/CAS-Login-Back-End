@@ -11,7 +11,7 @@ public class ApiResponse<T>
     public IReadOnlyCollection<string>? Errors { get; init; }
 
     public static ApiResponse<T> SuccessResponse(
-        T data,
+        T? data,
         string message = "Operation completed successfully.")
     {
         return new ApiResponse<T>
