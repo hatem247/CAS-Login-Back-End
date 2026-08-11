@@ -31,7 +31,7 @@ public sealed class AuthController : ControllerBase
         var result = await _authService.LoginAsync(
             request.Email,
             request.Password,
-            request.BusinessEntityName,
+            request.BusinessEntityId,
             cancellationToken);
 
         return Ok(ApiResponse<dynamic>.SuccessResponse(
@@ -52,7 +52,7 @@ public sealed class AuthController : ControllerBase
 
         var result = await _authService.ExchangeTokenAsync(
             token,
-            request.BusinessEntityName,
+            request.BusinessEntityId,
             cancellationToken);
 
         return Ok(ApiResponse<dynamic>.SuccessResponse(

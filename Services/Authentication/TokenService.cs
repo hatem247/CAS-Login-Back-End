@@ -49,6 +49,7 @@ public sealed class TokenService : ITokenService
             new("StatusId", descriptor.StatusId.ToString()),
             new("GovernoratesId", descriptor.GovernoratesId?.ToString() ?? string.Empty),
 
+            new("BusinessEntityId", descriptor.BusinessEntityId.ToString()),
             new("BusinessEntityName", descriptor.BusinessEntityName),
 
             new("Role", descriptor.Role),

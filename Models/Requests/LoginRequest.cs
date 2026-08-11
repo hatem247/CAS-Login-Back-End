@@ -9,5 +9,5 @@ public class LoginRequest
 
     public string Password { get; set; } = string.Empty;
 
-    public string BusinessEntityName { get; set; } = string.Empty;
+    public long BusinessEntityId { get; set; }
 }

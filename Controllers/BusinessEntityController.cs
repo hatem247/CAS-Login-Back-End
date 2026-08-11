@@ -50,25 +50,25 @@ public class BusinessEntityController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves a specific business entity by name.
+    /// Retrieves a specific business entity by ID.
     /// </summary>
     /// <remarks>
-    /// GET /api/businessentity/{name}
+    /// GET /api/businessentity/{id}
     /// Authorization: Bearer {TOKEN}
     /// </remarks>
-    [HttpGet("{name}")]
-    public async Task<ActionResult<ApiResponse<dynamic>>> GetByNameAsync(
-        string name,
+    [HttpGet("{id:long}")]
+    public async Task<ActionResult<ApiResponse<dynamic>>> GetByIdAsync(
+        long id,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var result = await _businessEntityService.GetByNameAsync(name, cancellationToken);
+            var result = await _businessEntityService.GetByIdAsync(id, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Business entity retrieved successfully."));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Get business entity by name error");
+            _logger.LogError(ex, "Get business entity by ID error");
             throw;
         }
     }

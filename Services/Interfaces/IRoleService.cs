@@ -22,6 +22,6 @@ public interface IRoleService
     /// </summary>
     Task<RoleResponse> GetAccountRoleAsync(
         int accountId,
-        string businessEntityName,
+        long businessEntityId,
         CancellationToken cancellationToken = default);
 }

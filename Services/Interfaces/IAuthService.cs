@@ -8,12 +8,12 @@ namespace CAS_Login_Back_End.Services.Interfaces
         Task<CAS_Login_Back_End.Models.Responses.LoginResponse> LoginAsync(
             string email,
             string password,
-            string businessEntityName,
+            long businessEntityId,
             CancellationToken cancellationToken = default);
 
         Task<CAS_Login_Back_End.Models.Responses.ExchangeTokenResponse> ExchangeTokenAsync(
             string ssoToken,
-            string businessEntityName,
+            long businessEntityId,
             CancellationToken cancellationToken = default);
 
         Task<CAS_Login_Back_End.Models.Responses.ValidateTokenResponse> ValidateTokenAsync(

@@ -77,12 +77,12 @@ public class RoleController : ControllerBase
     /// Retrieves the role of the current user in a business entity.
     /// </summary>
     /// <remarks>
-    /// GET /api/role/account/{businessEntityName}
+    /// GET /api/role/account/{businessEntityId}
     /// Authorization: Bearer {TOKEN}
     /// </remarks>
-    [HttpGet("account/{businessEntityName}")]
+    [HttpGet("account/{businessEntityId:long}")]
     public async Task<ActionResult<ApiResponse<dynamic>>> GetAccountRoleAsync(
-        string businessEntityName,
+        long businessEntityId,
         CancellationToken cancellationToken = default)
     {
         try
@@ -93,7 +93,7 @@ public class RoleController : ControllerBase
                 return Unauthorized(ApiResponse<dynamic>.FailureResponse("Unauthorized."));
             }
 
-            var result = await _roleService.GetAccountRoleAsync((int)accountId.Value, businessEntityName, cancellationToken);
+            var result = await _roleService.GetAccountRoleAsync((int)accountId.Value, businessEntityId, cancellationToken);
             return Ok(ApiResponse<dynamic>.SuccessResponse(result, "Role retrieved successfully."));
         }
         catch (Exception ex)

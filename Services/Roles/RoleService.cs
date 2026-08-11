@@ -59,41 +59,42 @@ public class RoleService : IRoleService
 
     public async Task<RoleResponse> GetAccountRoleAsync(
         int accountId,
-        string businessEntityName,
+        long businessEntityId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(businessEntityName))
+        if (businessEntityId <= 0)
         {
-            throw new NotFoundException("Business entity name is required.");
+            throw new NotFoundException("Business entity ID is required.");
         }
 
-        var accountRole = await _dbContext.AccountRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                ar => ar.AccountId == accountId && ar.BusinessEntityName == businessEntityName,
-                cancellationToken);
-
-        if (accountRole is null || accountRole.RoleId is null)
-        {
-            throw new NotFoundException(
-                $"No role found for account {accountId} in business entity '{businessEntityName}'.");
-        }
-
-        var role = await _dbContext.Roles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == accountRole.RoleId.Value, cancellationToken);
-
-        if (role is null)
-        {
-            throw new NotFoundException(
-                $"No role found for account {accountId} in business entity '{businessEntityName}'.");
-        }
+        var role = await _dbContext.Database
+            .SqlQuery<AccountBusinessEntityRole>($"""
+                SELECT r.[Id] AS [RoleId],
+                       r.[RoleName] AS [Name],
+                       r.[BusinessEntity] AS [Description]
+                FROM [dbo].[AccountRoles] AS ar
+                INNER JOIN [dbo].[Roles] AS r ON r.[Id] = ar.[RoleID]
+                INNER JOIN [dbo].[Tbl_BusinessEntity] AS be
+                    ON be.[BusinessEntity] = ar.[BusinessEntityName]
+                WHERE ar.[AccountID] = {accountId}
+                  AND be.[ID] = {businessEntityId}
+                """)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException(
+                $"No role found for account {accountId} in business entity '{businessEntityId}'.");
 
         return new RoleResponse
         {
-            RoleId = checked((int)role.Id),
-            Name = role.RoleName,
-            Description = role.BusinessEntity ?? string.Empty
+            RoleId = checked((int)role.RoleId),
+            Name = role.Name,
+            Description = role.Description ?? string.Empty
         };
+    }
+
+    private sealed class AccountBusinessEntityRole
+    {
+        public long RoleId { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public string? Description { get; init; }
     }
 }

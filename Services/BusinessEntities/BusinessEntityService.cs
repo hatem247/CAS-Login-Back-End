@@ -1,5 +1,4 @@
 using CAS_Login_Back_End.Data;
-using CAS_Login_Back_End.Data.Entities;
 using CAS_Login_Back_End.Exceptions;
 using CAS_Login_Back_End.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -7,49 +6,32 @@ using Microsoft.EntityFrameworkCore;
 namespace CAS_Login_Back_End.Services.BusinessEntities;
 
 /// <summary>
-/// Implementation of IBusinessEntityService for business entity management.
+/// Reads business entities from Tbl_BusinessEntity without changing the scaffolded database model.
 /// </summary>
-public class BusinessEntityService : IBusinessEntityService
+public sealed class BusinessEntityService : IBusinessEntityService
 {
     private readonly CasDbContext _dbContext;
-    private readonly ILogger<BusinessEntityService> _logger;
 
-    public BusinessEntityService(
-        CasDbContext dbContext,
-        ILogger<BusinessEntityService> logger)
+    public BusinessEntityService(CasDbContext dbContext, ILogger<BusinessEntityService> logger)
     {
         _dbContext = dbContext;
-        _logger = logger;
     }
 
-    public async Task<IEnumerable<BusinessEntityResponse>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<BusinessEntityResponse>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        (await QueryBusinessEntitiesAsync(cancellationToken))
+        .Select(ToResponse)
+        .OrderBy(entity => entity.Name);
+
+    public async Task<BusinessEntityResponse> GetByIdAsync(
+        long businessEntityId,
+        CancellationToken cancellationToken = default)
     {
-        var roles = await _dbContext.Roles
-            .AsNoTracking()
-            .Where(role => !string.IsNullOrWhiteSpace(role.BusinessEntity))
-            .Select(role => new RoleBusinessEntityRow(role.Id, role.BusinessEntity!))
-            .ToListAsync(cancellationToken);
+        var entity = (await QueryBusinessEntitiesAsync(cancellationToken))
+            .SingleOrDefault(entity => entity.Id == businessEntityId);
 
-        return ToBusinessEntityResponses(roles);
-    }
-
-    public async Task<BusinessEntityResponse> GetByNameAsync(string businessEntityName, CancellationToken cancellationToken = default)
-    {
-        var roles = await _dbContext.Roles
-            .AsNoTracking()
-            .Where(role => !string.IsNullOrWhiteSpace(role.BusinessEntity))
-            .Select(role => new RoleBusinessEntityRow(role.Id, role.BusinessEntity!))
-            .ToListAsync(cancellationToken);
-
-        var entity = ToBusinessEntityResponses(roles)
-            .FirstOrDefault(entity => string.Equals(entity.Name, businessEntityName, StringComparison.OrdinalIgnoreCase));
-
-        if (entity is null)
-        {
-            throw new NotFoundException($"Business entity '{businessEntityName}' was not found.");
-        }
-
-        return entity;
+        return entity is null
+            ? throw new NotFoundException($"Business entity '{businessEntityId}' was not found.")
+            : ToResponse(entity);
     }
 
     public async Task<IEnumerable<BusinessEntityResponse>> GetAccountBusinessEntitiesAsync(
@@ -63,25 +45,35 @@ public class BusinessEntityService : IBusinessEntityService
             .Select(accountRole => accountRole.BusinessEntityName!)
             .ToListAsync(cancellationToken);
 
-        var roles = await _dbContext.Roles
-            .AsNoTracking()
-            .Where(role => role.BusinessEntity != null && assignedEntityNames.Contains(role.BusinessEntity))
-            .Select(role => new RoleBusinessEntityRow(role.Id, role.BusinessEntity!))
-            .ToListAsync(cancellationToken);
+        var entities = (await QueryBusinessEntitiesAsync(cancellationToken))
+            .Where(entity => assignedEntityNames.Contains(entity.Name, StringComparer.OrdinalIgnoreCase));
 
-        return ToBusinessEntityResponses(roles);
+        return entities
+            .DistinctBy(entity => entity.Id)
+            .Select(ToResponse)
+            .OrderBy(entity => entity.Name);
     }
 
-    private static IEnumerable<BusinessEntityResponse> ToBusinessEntityResponses(
-        IEnumerable<RoleBusinessEntityRow> roles) => roles
-        .GroupBy(role => role.BusinessEntity, StringComparer.OrdinalIgnoreCase)
-        .Select(group => new BusinessEntityResponse
-        {
-            Name = group.First().BusinessEntity,
-            Description = group.First().BusinessEntity,
-            IsActive = true
-        })
-        .OrderBy(entity => entity.Name);
+    private Task<List<BusinessEntityRow>> QueryBusinessEntitiesAsync(CancellationToken cancellationToken) =>
+        _dbContext.Database
+            .SqlQuery<BusinessEntityRow>($"""
+                SELECT [ID] AS [Id],
+                       [BusinessEntity] AS [Name]
+                FROM [dbo].[Tbl_BusinessEntity]
+                """)
+            .ToListAsync(cancellationToken);
 
-    private sealed record RoleBusinessEntityRow(long Id, string BusinessEntity);
+    private static BusinessEntityResponse ToResponse(BusinessEntityRow entity) => new()
+    {
+        Id = entity.Id,
+        Name = entity.Name,
+        Description = entity.Name,
+        IsActive = true
+    };
+
+    private sealed class BusinessEntityRow
+    {
+        public long Id { get; init; }
+        public string Name { get; init; } = string.Empty;
+    }
 }

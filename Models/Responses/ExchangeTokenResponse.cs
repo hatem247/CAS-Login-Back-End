@@ -6,6 +6,8 @@ public sealed class ExchangeTokenResponse
 
     public string Role { get; init; } = string.Empty;
 
+    public long BusinessEntityId { get; init; }
+
     public string BusinessEntityName { get; init; } = string.Empty;
 
     public DateTime JwtExpiresAt { get; init; }

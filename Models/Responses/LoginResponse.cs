@@ -16,6 +16,8 @@ public sealed class LoginResponse
 
     public string Role { get; init; } = string.Empty;
 
+    public long BusinessEntityId { get; init; }
+
     public string BusinessEntityName { get; init; } = string.Empty;
 
     public DateTime SsoExpiresAt { get; init; }

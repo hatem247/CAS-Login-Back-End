@@ -33,7 +33,7 @@ namespace CAS_Login_Back_End.Services.Authentication
         public async Task<LoginResponse> LoginAsync(
             string email,
             string password,
-            string businessEntityName,
+            long businessEntityId,
             CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(email))
@@ -41,6 +41,9 @@ namespace CAS_Login_Back_End.Services.Authentication
 
             if (string.IsNullOrWhiteSpace(password))
                 throw new ValidationException("Password is required.");
+
+            if (businessEntityId <= 0)
+                throw new ValidationException("Business entity ID is required.");
 
             // Login is the single credential source. Profile data is resolved
             // from Account_Info by the Login.AccountId after authentication.
@@ -59,24 +62,8 @@ namespace CAS_Login_Back_End.Services.Authentication
             if (!VerifyPassword(password, login.PasswordHash))
                 throw new UnauthorizedException("Invalid email or password.");
 
-            var accountRole = await _dbContext.AccountRoles
-                .AsNoTracking()
-                .SingleOrDefaultAsync(
-                    ar => ar.AccountId == account.Id &&
-                          ar.BusinessEntityName == businessEntityName,
-                    cancellationToken)
-                ?? throw new UnauthorizedException("You do not have access to this business entity.");
-
-            string roleName = string.Empty;
-
-            if (accountRole.RoleId.HasValue)
-            {
-                var roleEntity = await _dbContext.Roles
-                    .AsNoTracking()
-                    .SingleOrDefaultAsync(r => r.Id == accountRole.RoleId.Value, cancellationToken);
-
-                roleName = roleEntity?.RoleName ?? string.Empty;
-            }
+            var businessEntity = await GetAuthorizedBusinessEntityAsync(
+                account.Id, businessEntityId, cancellationToken);
 
             var ssoToken = _tokenService.GenerateSsoToken(account.Id, account.NationalId);
 
@@ -96,8 +83,9 @@ namespace CAS_Login_Back_End.Services.Authentication
                     IsActive = account.IsActive,
                     StatusId = account.StatusId,
                     GovernoratesId = account.GovernoratesId,
-                    BusinessEntityName = businessEntityName,
-                    Role = roleName
+                    BusinessEntityId = businessEntity.Id,
+                    BusinessEntityName = businessEntity.Name,
+                    Role = businessEntity.RoleName
                 });
 
             return new LoginResponse
@@ -110,9 +98,10 @@ namespace CAS_Login_Back_End.Services.Authentication
                 FullNameEn = account.FullNameEn ?? string.Empty,
                 FullNameAr = account.FullNameAr ?? string.Empty,
 
-                Role = roleName,
+                Role = businessEntity.RoleName,
 
-                BusinessEntityName = businessEntityName,
+                BusinessEntityId = businessEntity.Id,
+                BusinessEntityName = businessEntity.Name,
 
                 SsoExpiresAt = DateTime.UtcNow.AddHours(8),
                 JwtCreatedAt = jwtCreatedAt,
@@ -122,14 +111,14 @@ namespace CAS_Login_Back_End.Services.Authentication
 
         public async Task<ExchangeTokenResponse> ExchangeTokenAsync(
             string ssoToken,
-            string businessEntityName,
+            long businessEntityId,
             CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(ssoToken))
                 throw new ValidationException("SSO token is required.");
 
-            if (string.IsNullOrWhiteSpace(businessEntityName))
-                throw new ValidationException("Business entity name is required.");
+            if (businessEntityId <= 0)
+                throw new ValidationException("Business entity ID is required.");
 
             ClaimsPrincipal principal;
 
@@ -156,24 +145,8 @@ namespace CAS_Login_Back_End.Services.Authentication
 
             var account = await GetActiveAccountInfoAsync(login.AccountId, cancellationToken);
 
-            var accountRole = await _dbContext.AccountRoles
-                .AsNoTracking()
-                .SingleOrDefaultAsync(
-                    ar => ar.AccountId == account.Id && ar.BusinessEntityName == businessEntityName,
-                    cancellationToken)
-                ?? throw new UnauthorizedException("You do not have access to this business entity.");
-
-            var roleName = string.Empty;
-
-            if (accountRole.RoleId.HasValue)
-            {
-                roleName = await _dbContext.Roles
-                    .AsNoTracking()
-                    .Where(role => role.Id == accountRole.RoleId.Value)
-                    .Select(role => role.RoleName)
-                    .SingleOrDefaultAsync(cancellationToken)
-                    ?? string.Empty;
-            }
+            var businessEntity = await GetAuthorizedBusinessEntityAsync(
+                account.Id, businessEntityId, cancellationToken);
 
             var jwtCreatedAt = DateTime.UtcNow;
             var jwtToken = _tokenService.GenerateSystemToken(new SystemTokenDescriptor
@@ -190,15 +163,17 @@ namespace CAS_Login_Back_End.Services.Authentication
                 IsActive = account.IsActive,
                 StatusId = account.StatusId,
                 GovernoratesId = account.GovernoratesId,
-                BusinessEntityName = businessEntityName,
-                Role = roleName
+                BusinessEntityId = businessEntity.Id,
+                BusinessEntityName = businessEntity.Name,
+                Role = businessEntity.RoleName
             });
 
             return new ExchangeTokenResponse
             {
                 JwtToken = jwtToken,
-                Role = roleName,
-                BusinessEntityName = businessEntityName,
+                Role = businessEntity.RoleName,
+                BusinessEntityId = businessEntity.Id,
+                BusinessEntityName = businessEntity.Name,
                 JwtCreatedAt = jwtCreatedAt,
                 JwtExpiresAt = DateTime.UtcNow.AddHours(1)
             };
@@ -272,6 +247,36 @@ namespace CAS_Login_Back_End.Services.Authentication
                 throw new UnauthorizedException("Account is inactive.");
 
             return account;
+        }
+
+        private async Task<AuthorizedBusinessEntity> GetAuthorizedBusinessEntityAsync(
+            long accountId,
+            long businessEntityId,
+            CancellationToken cancellationToken)
+        {
+            var businessEntity = await _dbContext.Database
+                .SqlQuery<AuthorizedBusinessEntity>($"""
+                    SELECT be.[ID] AS [Id],
+                           be.[BusinessEntity] AS [Name],
+                           ISNULL(r.[RoleName], '') AS [RoleName]
+                    FROM [dbo].[Tbl_BusinessEntity] AS be
+                    INNER JOIN [dbo].[AccountRoles] AS ar
+                        ON ar.[BusinessEntityName] = be.[BusinessEntity]
+                    LEFT JOIN [dbo].[Roles] AS r ON r.[Id] = ar.[RoleID]
+                    WHERE ar.[AccountID] = {accountId}
+                      AND be.[ID] = {businessEntityId}
+                    """)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            return businessEntity
+                ?? throw new UnauthorizedException("You do not have access to this business entity.");
+        }
+
+        private sealed class AuthorizedBusinessEntity
+        {
+            public long Id { get; init; }
+            public string Name { get; init; } = string.Empty;
+            public string RoleName { get; init; } = string.Empty;
         }
 
         private static DateTime? ReadCreatedAt(ClaimsPrincipal principal)
