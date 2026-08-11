@@ -1,5 +1,4 @@
 using CAS_Login_Back_End.Data;
-using CAS_Login_Back_End.Data.Entities;
 using CAS_Login_Back_End.Exceptions;
 using CAS_Login_Back_End.Models.Responses;
 using CAS_Login_Back_End.Services.Interfaces;
@@ -13,14 +12,14 @@ namespace CAS_Login_Back_End.Services.Roles;
 public class RoleService : IRoleService
 {
     private readonly CasDbContext _dbContext;
-    private readonly ILogger<RoleService> _logger;
+    private readonly IBusinessEntityAuthorizationService _businessEntityAuthorizationService;
 
     public RoleService(
         CasDbContext dbContext,
-        ILogger<RoleService> logger)
+        IBusinessEntityAuthorizationService businessEntityAuthorizationService)
     {
         _dbContext = dbContext;
-        _logger = logger;
+        _businessEntityAuthorizationService = businessEntityAuthorizationService;
     }
 
     public async Task<IEnumerable<RoleResponse>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -67,34 +66,20 @@ public class RoleService : IRoleService
             throw new NotFoundException("Business entity ID is required.");
         }
 
-        var role = await _dbContext.Database
-            .SqlQuery<AccountBusinessEntityRole>($"""
-                SELECT r.[Id] AS [RoleId],
-                       r.[RoleName] AS [Name],
-                       r.[BusinessEntity] AS [Description]
-                FROM [dbo].[AccountRoles] AS ar
-                INNER JOIN [dbo].[Roles] AS r ON r.[Id] = ar.[RoleID]
-                INNER JOIN [dbo].[Tbl_BusinessEntity] AS be
-                    ON be.[BusinessEntity] = ar.[BusinessEntityName]
-                WHERE ar.[AccountID] = {accountId}
-                  AND be.[ID] = {businessEntityId}
-                """)
-            .SingleOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException(
+        var assignment = await _businessEntityAuthorizationService.GetAuthorizedAsync(
+            accountId, businessEntityId, cancellationToken);
+
+        if (!assignment.RoleId.HasValue)
+        {
+            throw new NotFoundException(
                 $"No role found for account {accountId} in business entity '{businessEntityId}'.");
+        }
 
         return new RoleResponse
         {
-            RoleId = checked((int)role.RoleId),
-            Name = role.Name,
-            Description = role.Description ?? string.Empty
+            RoleId = checked((int)assignment.RoleId.Value),
+            Name = assignment.RoleName,
+            Description = assignment.RoleDescription
         };
-    }
-
-    private sealed class AccountBusinessEntityRole
-    {
-        public long RoleId { get; init; }
-        public string Name { get; init; } = string.Empty;
-        public string? Description { get; init; }
     }
 }

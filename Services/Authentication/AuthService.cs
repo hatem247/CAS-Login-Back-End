@@ -9,7 +9,9 @@ using CAS_Login_Back_End.Data;
 using CAS_Login_Back_End.Services.Interfaces;
 using CAS_Login_Back_End.Models.Responses;
 using CAS_Login_Back_End.Models.Authentication;
+using CAS_Login_Back_End.Models.Configuration;
 using CAS_Login_Back_End.Exceptions;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace CAS_Login_Back_End.Services.Authentication
@@ -19,15 +21,22 @@ namespace CAS_Login_Back_End.Services.Authentication
         private readonly CasDbContext _dbContext;
         private readonly ITokenService _tokenService;
         private readonly IAccountIdentityService _accountIdentityService;
+        private readonly IBusinessEntityAuthorizationService _businessEntityAuthorizationService;
+        private readonly JwtOptions _jwtOptions;
 
         public AuthService(
             CasDbContext dbContext,
             ITokenService tokenService,
-            IAccountIdentityService accountIdentityService)
+            IAccountIdentityService accountIdentityService,
+            IBusinessEntityAuthorizationService businessEntityAuthorizationService,
+            IOptions<JwtOptions> jwtOptions)
         {
             _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
             _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
             _accountIdentityService = accountIdentityService ?? throw new ArgumentNullException(nameof(accountIdentityService));
+            _businessEntityAuthorizationService = businessEntityAuthorizationService
+                ?? throw new ArgumentNullException(nameof(businessEntityAuthorizationService));
+            _jwtOptions = jwtOptions?.Value ?? throw new ArgumentNullException(nameof(jwtOptions));
         }
 
         public async Task<LoginResponse> LoginAsync(
@@ -62,7 +71,7 @@ namespace CAS_Login_Back_End.Services.Authentication
             if (!VerifyPassword(password, login.PasswordHash))
                 throw new UnauthorizedException("Invalid email or password.");
 
-            var businessEntity = await GetAuthorizedBusinessEntityAsync(
+            var businessEntity = await _businessEntityAuthorizationService.GetAuthorizedAsync(
                 account.Id, businessEntityId, cancellationToken);
 
             var ssoToken = _tokenService.GenerateSsoToken(account.Id, account.NationalId);
@@ -85,6 +94,7 @@ namespace CAS_Login_Back_End.Services.Authentication
                     GovernoratesId = account.GovernoratesId,
                     BusinessEntityId = businessEntity.Id,
                     BusinessEntityName = businessEntity.Name,
+                    RedirectUrl = businessEntity.RedirectUrl ?? string.Empty,
                     Role = businessEntity.RoleName
                 });
 
@@ -102,10 +112,11 @@ namespace CAS_Login_Back_End.Services.Authentication
 
                 BusinessEntityId = businessEntity.Id,
                 BusinessEntityName = businessEntity.Name,
+                RedirectUrl = businessEntity.RedirectUrl ?? string.Empty,
 
-                SsoExpiresAt = DateTime.UtcNow.AddHours(8),
+                SsoExpiresAt = jwtCreatedAt.AddHours(_jwtOptions.SsoExpirationHours),
                 JwtCreatedAt = jwtCreatedAt,
-                JwtExpiresAt = DateTime.UtcNow.AddHours(1)
+                JwtExpiresAt = jwtCreatedAt.AddMinutes(_jwtOptions.ExpirationMinutes)
             };
         }
 
@@ -145,7 +156,7 @@ namespace CAS_Login_Back_End.Services.Authentication
 
             var account = await GetActiveAccountInfoAsync(login.AccountId, cancellationToken);
 
-            var businessEntity = await GetAuthorizedBusinessEntityAsync(
+            var businessEntity = await _businessEntityAuthorizationService.GetAuthorizedAsync(
                 account.Id, businessEntityId, cancellationToken);
 
             var jwtCreatedAt = DateTime.UtcNow;
@@ -165,6 +176,7 @@ namespace CAS_Login_Back_End.Services.Authentication
                 GovernoratesId = account.GovernoratesId,
                 BusinessEntityId = businessEntity.Id,
                 BusinessEntityName = businessEntity.Name,
+                RedirectUrl = businessEntity.RedirectUrl ?? string.Empty,
                 Role = businessEntity.RoleName
             });
 
@@ -174,8 +186,9 @@ namespace CAS_Login_Back_End.Services.Authentication
                 Role = businessEntity.RoleName,
                 BusinessEntityId = businessEntity.Id,
                 BusinessEntityName = businessEntity.Name,
+                RedirectUrl = businessEntity.RedirectUrl ?? string.Empty,
                 JwtCreatedAt = jwtCreatedAt,
-                JwtExpiresAt = DateTime.UtcNow.AddHours(1)
+                JwtExpiresAt = jwtCreatedAt.AddMinutes(_jwtOptions.ExpirationMinutes)
             };
         }
 
@@ -247,36 +260,6 @@ namespace CAS_Login_Back_End.Services.Authentication
                 throw new UnauthorizedException("Account is inactive.");
 
             return account;
-        }
-
-        private async Task<AuthorizedBusinessEntity> GetAuthorizedBusinessEntityAsync(
-            long accountId,
-            long businessEntityId,
-            CancellationToken cancellationToken)
-        {
-            var businessEntity = await _dbContext.Database
-                .SqlQuery<AuthorizedBusinessEntity>($"""
-                    SELECT be.[ID] AS [Id],
-                           be.[BusinessEntity] AS [Name],
-                           ISNULL(r.[RoleName], '') AS [RoleName]
-                    FROM [dbo].[Tbl_BusinessEntity] AS be
-                    INNER JOIN [dbo].[AccountRoles] AS ar
-                        ON ar.[BusinessEntityName] = be.[BusinessEntity]
-                    LEFT JOIN [dbo].[Roles] AS r ON r.[Id] = ar.[RoleID]
-                    WHERE ar.[AccountID] = {accountId}
-                      AND be.[ID] = {businessEntityId}
-                    """)
-                .SingleOrDefaultAsync(cancellationToken);
-
-            return businessEntity
-                ?? throw new UnauthorizedException("You do not have access to this business entity.");
-        }
-
-        private sealed class AuthorizedBusinessEntity
-        {
-            public long Id { get; init; }
-            public string Name { get; init; } = string.Empty;
-            public string RoleName { get; init; } = string.Empty;
         }
 
         private static DateTime? ReadCreatedAt(ClaimsPrincipal principal)

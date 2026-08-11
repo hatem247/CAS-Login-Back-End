@@ -12,7 +12,7 @@ public sealed class BusinessEntityService : IBusinessEntityService
 {
     private readonly CasDbContext _dbContext;
 
-    public BusinessEntityService(CasDbContext dbContext, ILogger<BusinessEntityService> logger)
+    public BusinessEntityService(CasDbContext dbContext)
     {
         _dbContext = dbContext;
     }
@@ -58,7 +58,8 @@ public sealed class BusinessEntityService : IBusinessEntityService
         _dbContext.Database
             .SqlQuery<BusinessEntityRow>($"""
                 SELECT [ID] AS [Id],
-                       [BusinessEntity] AS [Name]
+                       [BusinessEntity] AS [Name],
+                       [URL] AS [RedirectUrl]
                 FROM [dbo].[Tbl_BusinessEntity]
                 """)
             .ToListAsync(cancellationToken);
@@ -68,6 +69,7 @@ public sealed class BusinessEntityService : IBusinessEntityService
         Id = entity.Id,
         Name = entity.Name,
         Description = entity.Name,
+        RedirectUrl = entity.RedirectUrl ?? string.Empty,
         IsActive = true
     };
 
@@ -75,5 +77,6 @@ public sealed class BusinessEntityService : IBusinessEntityService
     {
         public long Id { get; init; }
         public string Name { get; init; } = string.Empty;
+        public string? RedirectUrl { get; init; }
     }
 }

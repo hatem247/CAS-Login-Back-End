@@ -36,5 +36,7 @@ public class BusinessEntityResponse
 
     public string Description { get; set; } = string.Empty;
 
+    public string RedirectUrl { get; set; } = string.Empty;
+
     public bool IsActive { get; set; }
 }

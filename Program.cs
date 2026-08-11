@@ -1,4 +1,5 @@
 using CAS_Login_Back_End.Data;
+using CAS_Login_Back_End.Models.Configuration;
 using CAS_Login_Back_End.Middleware;
 using CAS_Login_Back_End.Services.Accounts;
 using CAS_Login_Back_End.Services.Authentication;
@@ -15,6 +16,17 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+
+builder.Services.AddOptions<JwtOptions>()
+    .BindConfiguration(JwtOptions.SectionName)
+    .Validate(options =>
+        !string.IsNullOrWhiteSpace(options.Key) &&
+        !string.IsNullOrWhiteSpace(options.Issuer) &&
+        !string.IsNullOrWhiteSpace(options.Audience) &&
+        options.ExpirationMinutes > 0 &&
+        options.SsoExpirationHours > 0,
+        "JWT settings must include Key, Issuer, Audience, and positive token lifetimes.")
+    .ValidateOnStart();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -90,6 +102,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IBusinessEntityService, BusinessEntityService>();
+builder.Services.AddScoped<IBusinessEntityAuthorizationService, BusinessEntityAuthorizationService>();
 
 var app = builder.Build();
 

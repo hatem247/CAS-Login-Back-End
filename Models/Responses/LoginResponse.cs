@@ -20,6 +20,8 @@ public sealed class LoginResponse
 
     public string BusinessEntityName { get; init; } = string.Empty;
 
+    public string RedirectUrl { get; init; } = string.Empty;
+
     public DateTime SsoExpiresAt { get; init; }
 
     /// <summary>

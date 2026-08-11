@@ -10,6 +10,8 @@ public sealed class ExchangeTokenResponse
 
     public string BusinessEntityName { get; init; } = string.Empty;
 
+    public string RedirectUrl { get; init; } = string.Empty;
+
     public DateTime JwtExpiresAt { get; init; }
 
     /// <summary>

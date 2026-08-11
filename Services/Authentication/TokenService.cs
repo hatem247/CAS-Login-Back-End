@@ -2,19 +2,21 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using CAS_Login_Back_End.Models.Authentication;
+using CAS_Login_Back_End.Models.Configuration;
 using CAS_Login_Back_End.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace CAS_Login_Back_End.Services.Authentication;
 
 public sealed class TokenService : ITokenService
 {
-    private readonly IConfiguration _configuration;
+    private readonly JwtOptions _jwtOptions;
     private readonly JwtSecurityTokenHandler _tokenHandler = new();
 
-    public TokenService(IConfiguration configuration)
+    public TokenService(IOptions<JwtOptions> jwtOptions)
     {
-        _configuration = configuration;
+        _jwtOptions = jwtOptions.Value;
     }
 
     public string GenerateSsoToken(long accountId, string nationalId)
@@ -26,7 +28,7 @@ public sealed class TokenService : ITokenService
             new("TokenType", "SSO")
         };
 
-        return GenerateToken(claims, DateTime.UtcNow.AddHours(8));
+        return GenerateToken(claims, DateTime.UtcNow.AddHours(_jwtOptions.SsoExpirationHours));
     }
 
     public string GenerateSystemToken(SystemTokenDescriptor descriptor)
@@ -51,13 +53,14 @@ public sealed class TokenService : ITokenService
 
             new("BusinessEntityId", descriptor.BusinessEntityId.ToString()),
             new("BusinessEntityName", descriptor.BusinessEntityName),
+            new("RedirectUrl", descriptor.RedirectUrl),
 
             new("Role", descriptor.Role),
 
             new("TokenType", "System")
         };
 
-        return GenerateToken(claims, DateTime.UtcNow.AddHours(1));
+        return GenerateToken(claims, DateTime.UtcNow.AddMinutes(_jwtOptions.ExpirationMinutes));
     }
 
     public bool ValidateToken(string token)
@@ -83,10 +86,10 @@ public sealed class TokenService : ITokenService
                 IssuerSigningKey = GetSigningKey(),
 
                 ValidateIssuer = true,
-                ValidIssuer = _configuration["JWT:Issuer"],
+                ValidIssuer = _jwtOptions.Issuer,
 
                 ValidateAudience = true,
-                ValidAudience = _configuration["JWT:Audience"],
+                ValidAudience = _jwtOptions.Audience,
 
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
@@ -123,8 +126,8 @@ public sealed class TokenService : ITokenService
     private string GenerateToken(IEnumerable<Claim> claims, DateTime expires)
     {
         var token = new JwtSecurityToken(
-            issuer: _configuration["JWT:Issuer"],
-            audience: _configuration["JWT:Audience"],
+            issuer: _jwtOptions.Issuer,
+            audience: _jwtOptions.Audience,
             claims: claims,
             expires: expires,
             signingCredentials: new SigningCredentials(
@@ -136,11 +139,6 @@ public sealed class TokenService : ITokenService
 
     private SymmetricSecurityKey GetSigningKey()
     {
-        var key = _configuration["JWT:Key"];
-
-        if (string.IsNullOrWhiteSpace(key))
-            throw new InvalidOperationException("JWT:Key is missing.");
-
-        return new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        return new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
     }
 }
