@@ -10,7 +10,7 @@ namespace CAS_Login_Back_End.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "SystemToken")]
+[Authorize(Policy = "CasToken")]
 public class BusinessEntityController : ControllerBase
 {
     private readonly IBusinessEntityService _businessEntityService;

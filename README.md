@@ -2,8 +2,8 @@
 
 Authentication and account-management API for CAS clients. The API issues two JWTs:
 
-- **SSO token** — valid for 8 hours and used only to switch business entities.
-- **System token** — valid for 1 hour and required by protected API endpoints.
+- **SSO token** — valid for 8 hours and identifies an authenticated account.
+- **System token** — valid for 1 hour and includes the selected business-entity context.
 
 The client selects a business entity by its numeric `businessEntityId`. The API resolves its name and redirect URL from `Tbl_BusinessEntity`; clients must not send a business-entity name.
 
@@ -41,13 +41,13 @@ Swagger UI is available at `/swagger` in the Development environment.
 
 ## Authentication
 
-Protected endpoints require the system JWT:
+Protected endpoints accept either a valid SSO token or system JWT:
 
 ```http
 Authorization: Bearer {jwtToken}
 ```
 
-An SSO token cannot access protected endpoints. It is only accepted by `POST /api/auth/switch`.
+The login and registration endpoints are anonymous. All other protected endpoints accept both token types.
 
 The system JWT contains the account, role, business-entity ID/name, and `RedirectUrl` claims. The redirect URL is data returned from the authorized `Tbl_BusinessEntity.URL` row; clients should use it only after successful authentication.
 
@@ -81,26 +81,26 @@ Common status codes are `400` (validation), `401` (invalid token, credentials, o
 | Method | Endpoint | Authentication | Purpose |
 | --- | --- | --- | --- |
 | POST | `/api/auth/login` | None | Authenticate and obtain SSO/System tokens. |
-| POST | `/api/auth/switch` | SSO token | Obtain a system token for another entity. |
+| POST | `/api/auth/switch` | SSO or System token | Obtain a system token for another entity. |
 | POST | `/api/auth/validate` | SSO or System token | Validate a token. |
 | POST | `/api/account/register` | None | Create an account and login record. |
-| GET | `/api/account/profile` | System token | Get the current profile. |
-| PUT | `/api/account/profile` | System token | Update the current profile names. |
-| POST | `/api/account/change-password` | System token | Change the current password. |
-| POST | `/api/account/forgot-password` | None | Start the reset flow. |
-| POST | `/api/account/reset-password` | None | Reset a password. |
-| GET | `/api/businessentity` | System token | List business entities. |
-| GET | `/api/businessentity/{id}` | System token | Get one business entity. |
-| GET | `/api/businessentity/my-entities` | System token | List entities assigned to the caller. |
-| GET | `/api/role` | System token | List roles. |
-| GET | `/api/role/{id}` | System token | Get a role. |
-| GET | `/api/role/account/{businessEntityId}` | System token | Get the caller's role for an entity. |
+| GET | `/api/account/profile` | SSO or System token | Get the current profile. |
+| PUT | `/api/account/profile` | SSO or System token | Update the current profile names. |
+| POST | `/api/account/change-password` | SSO or System token | Change the current password. |
+| GET | `/api/businessentity` | SSO or System token | List business entities. |
+| GET | `/api/businessentity/{id}` | SSO or System token | Get one business entity. |
+| GET | `/api/businessentity/my-entities` | SSO or System token | List entities assigned to the caller. |
+| GET | `/api/role` | SSO or System token | List roles. |
+| GET | `/api/role/{id}` | SSO or System token | Get a role. |
+| GET | `/api/role/account/{businessEntityId}` | SSO or System token | Get the caller's role for an entity. |
 
 ## Authentication endpoints
 
 ### `POST /api/auth/login`
 
 Authenticates credentials and verifies the user has a role in the supplied business entity.
+
+`password` may be either the normal password or the exact stored BCrypt hash. Normal passwords are verified with BCrypt.
 
 Request:
 
@@ -140,12 +140,12 @@ Success response (`200`):
 
 ### `POST /api/auth/switch`
 
-Exchanges an SSO token for a new system token scoped to another entity to which the account is assigned.
+Uses an SSO or system token to obtain a new system token scoped to another entity to which the account is assigned.
 
 Request headers:
 
 ```http
-Authorization: Bearer {ssoToken}
+Authorization: Bearer {ssoOrJwtToken}
 ```
 
 Request:
@@ -246,11 +246,11 @@ Success response (`201`):
 
 ### `GET /api/account/profile`
 
-Requires a system token. Returns the same profile object shown in the registration response.
+Accepts either a valid SSO or system token. The API reads the account ID from the validated token, confirms that its login/profile is active, then returns the same profile object shown in the registration response.
 
 ### `PUT /api/account/profile`
 
-Requires a system token. Only the caller's English and Arabic names are updated.
+Requires an SSO or system token. The caller can update their names, phone number, and city. Identity, status, and other ID fields cannot be changed through this endpoint.
 
 ```json
 {
@@ -259,11 +259,13 @@ Requires a system token. Only the caller's English and Arabic names are updated.
 }
 ```
 
-Success response (`200`) contains the updated profile object.
+Include optional `phone` and `city` fields in the request; send `null` for either field to clear it. Success response (`200`) contains the updated profile object.
 
 ### `POST /api/account/change-password`
 
-Requires a system token.
+Requires an SSO or system token.
+
+`currentPassword` may be either the normal password or the exact stored BCrypt hash. Normal passwords are verified with BCrypt.
 
 ```json
 {
@@ -283,32 +285,9 @@ Success response (`200`):
 }
 ```
 
-### `POST /api/account/forgot-password`
-
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-The endpoint always returns `200` with a generic message to avoid exposing whether an email exists. Email delivery is currently a placeholder; no reset token is issued yet.
-
-### `POST /api/account/reset-password`
-
-```json
-{
-  "email": "user@example.com",
-  "resetToken": "token-from-reset-email",
-  "newPassword": "N3wP@ssw0rd!",
-  "confirmPassword": "N3wP@ssw0rd!"
-}
-```
-
-The current implementation accepts the `resetToken` field but does not validate it yet. Do not expose this endpoint publicly until token generation, delivery, storage, and validation are implemented.
-
 ## Business entity endpoints
 
-All business-entity endpoints require a system token.
+All business-entity endpoints accept an SSO or system token.
 
 ### `GET /api/businessentity`
 
@@ -344,7 +323,7 @@ Entity response example:
 
 ## Role endpoints
 
-All role endpoints require a system token.
+All role endpoints accept an SSO or system token.
 
 ### `GET /api/role`
 

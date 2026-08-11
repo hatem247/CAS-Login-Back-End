@@ -40,7 +40,7 @@ public sealed class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Exchanges a valid SSO token for a System JWT belonging to another Business Entity.
+    /// Exchanges a valid SSO or System token for a System JWT belonging to another Business Entity.
     /// </summary>
     [HttpPost("switch")]
     [ProducesResponseType(StatusCodes.Status200OK)]

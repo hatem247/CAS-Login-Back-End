@@ -11,7 +11,6 @@ namespace CAS_Login_Back_End.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "SystemToken")]
 public class AccountController : ControllerBase
 {
     private readonly IAccountService _accountService;
@@ -58,9 +57,10 @@ public class AccountController : ControllerBase
     /// </summary>
     /// <remarks>
     /// GET /api/account/profile
-    /// Authorization: Bearer {TOKEN}
+    /// Authorization: Bearer {SSO_OR_SYSTEM_TOKEN}
     /// </remarks>
     [HttpGet("profile")]
+    [Authorize(Policy = "CasToken")]
     public async Task<ActionResult<ApiResponse<dynamic>>> GetProfileAsync(
         CancellationToken cancellationToken = default)
     {
@@ -90,6 +90,7 @@ public class AccountController : ControllerBase
     /// Authorization: Bearer {TOKEN}
     /// </remarks>
     [HttpPut("profile")]
+    [Authorize(Policy = "CasToken")]
     public async Task<ActionResult<ApiResponse<dynamic>>> UpdateProfileAsync(
         [FromBody] UpdateProfileRequest request,
         CancellationToken cancellationToken = default)
@@ -120,6 +121,7 @@ public class AccountController : ControllerBase
     /// Authorization: Bearer {TOKEN}
     /// </remarks>
     [HttpPost("change-password")]
+    [Authorize(Policy = "CasToken")]
     public async Task<ActionResult<ApiResponse<dynamic>>> ChangePasswordAsync(
         [FromBody] ChangePasswordRequest request,
         CancellationToken cancellationToken = default)
@@ -142,51 +144,4 @@ public class AccountController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Initiates forgot password flow.
-    /// </summary>
-    /// <remarks>
-    /// POST /api/account/forgot-password
-    /// </remarks>
-    [HttpPost("forgot-password")]
-    [AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<dynamic>>> ForgotPasswordAsync(
-        [FromBody] ForgotPasswordRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _accountService.ForgotPasswordAsync(request, cancellationToken);
-            return Ok(ApiResponse<dynamic>.SuccessResponse(null, "If account exists, reset link has been sent."));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Forgot password error");
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Resets password using reset token.
-    /// </summary>
-    /// <remarks>
-    /// POST /api/account/reset-password
-    /// </remarks>
-    [HttpPost("reset-password")]
-    [AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<dynamic>>> ResetPasswordAsync(
-        [FromBody] ResetPasswordRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _accountService.ResetPasswordAsync(request, cancellationToken);
-            return Ok(ApiResponse<dynamic>.SuccessResponse(null, "Password reset successfully."));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Reset password error");
-            throw;
-        }
-    }
 }

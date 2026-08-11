@@ -40,17 +40,4 @@ public interface IAccountService
         ChangePasswordRequest request,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Initiates forgot password flow (sends reset token).
-    /// </summary>
-    Task ForgotPasswordAsync(
-        ForgotPasswordRequest request,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Resets password using reset token.
-    /// </summary>
-    Task ResetPasswordAsync(
-        ResetPasswordRequest request,
-        CancellationToken cancellationToken = default);
 }

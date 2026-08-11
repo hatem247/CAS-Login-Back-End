@@ -14,13 +14,16 @@ namespace CAS_Login_Back_End.Services.Accounts;
 public class AccountService : IAccountService
 {
     private readonly CasDbContext _dbContext;
+    private readonly IPasswordService _passwordService;
     private readonly ILogger<AccountService> _logger;
 
     public AccountService(
         CasDbContext dbContext,
+        IPasswordService passwordService,
         ILogger<AccountService> logger)
     {
         _dbContext = dbContext;
+        _passwordService = passwordService;
         _logger = logger;
     }
 
@@ -56,7 +59,7 @@ public class AccountService : IAccountService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Create login record with hashed password
-        var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+        var passwordHash = _passwordService.Hash(request.Password);
         var login = new Login
         {
             AccountId = account.Id,
@@ -120,6 +123,8 @@ public class AccountService : IAccountService
         // Update profile
         account.FullNameEn = request.FullNameEn;
         account.FullNameAr = request.FullNameAr;
+        account.Phone = request.Phone;
+        account.City = request.City;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -159,79 +164,17 @@ public class AccountService : IAccountService
         }
 
         // Verify current password
-        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, login.PasswordHash))
+        if (!_passwordService.Verify(request.CurrentPassword, login.PasswordHash))
         {
             throw new UnauthorizedException("Current password is incorrect.");
         }
 
         // Update password
-        login.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        login.PasswordHash = _passwordService.Hash(request.NewPassword);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Password changed for account: {AccountId}", accountId);
-    }
-
-    public async Task ForgotPasswordAsync(
-        ForgotPasswordRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(request.Email))
-        {
-            throw new ValidationException("Email is required.");
-        }
-
-        var login = await _dbContext.Logins
-            .AsNoTracking()
-            .FirstOrDefaultAsync(login => login.Email == request.Email, cancellationToken);
-
-        if (login is null)
-        {
-            // For security, don't reveal if email exists
-            _logger.LogWarning("Forgot password requested for non-existent email: {Email}", request.Email);
-            return;
-        }
-
-        // TODO: Implement password reset token generation and email sending
-        // For now, this is a placeholder
-        _logger.LogInformation("Forgot password initiated for account: {AccountId}", login.AccountId);
-    }
-
-    public async Task ResetPasswordAsync(
-        ResetPasswordRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(request.Email))
-        {
-            throw new ValidationException("Email is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.NewPassword))
-        {
-            throw new ValidationException("New password is required.");
-        }
-
-        if (request.NewPassword != request.ConfirmPassword)
-        {
-            throw new ValidationException("New password and confirmation do not match.");
-        }
-
-        // TODO: Implement password reset token validation
-        // For now, this is a placeholder
-
-        var login = await _dbContext.Logins
-            .FirstOrDefaultAsync(login => login.Email == request.Email, cancellationToken);
-
-        if (login is null)
-        {
-            throw new NotFoundException($"Login record with email {request.Email} not found.");
-        }
-
-        login.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Password reset for account: {AccountId}", login.AccountId);
     }
 
     private static void ValidateRegisterRequest(RegisterRequest request)
