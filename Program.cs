@@ -1,4 +1,5 @@
 using CAS_Login_Back_End.Data;
+using CAS_Login_Back_End.Models.Common;
 using CAS_Login_Back_End.Models.Configuration;
 using CAS_Login_Back_End.Middleware;
 using CAS_Login_Back_End.Services.Accounts;
@@ -7,9 +8,12 @@ using CAS_Login_Back_End.Services.BusinessEntities;
 using CAS_Login_Back_End.Services.Interfaces;
 using CAS_Login_Back_End.Services.Roles;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using System.Threading.RateLimiting;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,6 +30,62 @@ builder.Services.AddOptions<JwtOptions>()
         options.SsoExpirationHours > 0,
         "JWT settings must include Key, Issuer, Audience, and positive token lifetimes.")
     .ValidateOnStart();
+
+builder.Services.AddOptions<LoginRateLimitOptions>()
+    .BindConfiguration(LoginRateLimitOptions.SectionName)
+    .Validate(options =>
+        options.MaxRequests > 0 && options.Window > TimeSpan.Zero,
+        "Login rate limit settings must include a positive maximum request count and window.")
+    .ValidateOnStart();
+
+builder.Services.Configure<ForwardedHeadersOptions>(
+    builder.Configuration.GetSection("ForwardedHeaders"));
+
+var loginRateLimitOptions = builder.Configuration
+    .GetSection(LoginRateLimitOptions.SectionName)
+    .Get<LoginRateLimitOptions>()
+    ?? throw new InvalidOperationException("Login rate limit settings are missing.");
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var logger = context.HttpContext.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("LoginRateLimiting");
+
+        logger.LogWarning(
+            "Login request rate limit exceeded for client IP {ClientIp} on {Path}.",
+            context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            context.HttpContext.Request.Path);
+
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                Math.Ceiling(retryAfter.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            ApiResponse<object?>.FailureResponse("Too many login attempts. Please try again later."),
+            cancellationToken);
+    };
+
+    options.AddPolicy("login", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            clientIp,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = loginRateLimitOptions.MaxRequests,
+                Window = loginRateLimitOptions.Window,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -115,6 +175,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Forwarded headers are honored only from the trusted proxies/networks configured above.
+app.UseForwardedHeaders();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -2,6 +2,7 @@ using CAS_Login_Back_End.Models.Common;
 using CAS_Login_Back_End.Models.Requests;
 using CAS_Login_Back_End.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CAS_Login_Back_End.Controllers;
 
@@ -24,6 +25,8 @@ public sealed class AuthController : ControllerBase
     /// </summary>
     [HttpPost("login")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object?>), StatusCodes.Status429TooManyRequests)]
+    [EnableRateLimiting("login")]
     public async Task<ActionResult<ApiResponse<dynamic>>> LoginAsync(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken = default)

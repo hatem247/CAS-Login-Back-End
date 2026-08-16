@@ -27,6 +27,10 @@ Configure the connection and JWT settings in `appsettings.json` or user secrets:
     "Audience": "CAS.Clients",
     "ExpirationMinutes": 60,
     "SsoExpirationHours": 8
+  },
+  "LoginRateLimiting": {
+    "MaxRequests": 5,
+    "Window": "00:15:00"
   }
 }
 ```
@@ -75,6 +79,8 @@ Errors are returned by the exception middleware:
 ```
 
 Common status codes are `400` (validation), `401` (invalid token, credentials, or access), `404` (not found), and `500`.
+
+`POST /api/auth/login` is limited to five requests per client IP in each 15-minute fixed window. The sixth request returns `429 Too Many Requests` with `Too many login attempts. Please try again later.` Other endpoints are unaffected. When deployed behind a reverse proxy or load balancer, configure its trusted address in `ForwardedHeaders:KnownProxies` (or its trusted CIDR in `ForwardedHeaders:KnownNetworks`); forwarded client-IP headers from untrusted sources are ignored.
 
 ## Endpoint summary
 
