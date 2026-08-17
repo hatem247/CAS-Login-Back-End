@@ -1,28 +1,206 @@
-# CAS Login Back-End
+# CAS Login Backend
 
-Authentication and account-management API for CAS clients. The API issues two JWTs:
+<p align="center">
+  <img src="https://img.shields.io/badge/.NET%2010-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 10">
+  <img src="https://img.shields.io/badge/ASP.NET%20Core-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt="ASP.NET Core">
+  <img src="https://img.shields.io/badge/SQL%20Server-CC2927?style=for-the-badge&logo=microsoftsqlserver&logoColor=white" alt="SQL Server">
+  <img src="https://img.shields.io/badge/JWT-000000?style=for-the-badge" alt="JWT">
+  <img src="https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black" alt="Swagger">
+</p>
 
-- **SSO token** — valid for 8 hours and identifies an authenticated account.
-- **System token** — valid for 1 hour and includes the selected business-entity context.
+<p align="center">
+  A centralized authentication and authorization API for applications that need secure identity management, business-entity switching, and role-aware access control.
+</p>
 
-The client selects a business entity by its numeric `businessEntityId`. The API resolves its name and redirect URL from `Tbl_BusinessEntity`; clients must not send a business-entity name.
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#getting-started">Getting Started</a> ·
+  <a href="#api-overview">API Overview</a>
+</p>
 
-## Run locally
+---
+
+## Overview
+
+**CAS Login Backend** is an ASP.NET Core Web API designed to provide centralized authentication and authorization for multiple connected applications.
+
+The API supports two JWT-based security contexts:
+
+* **SSO Token** — identifies the authenticated account and remains valid for 8 hours.
+* **System Token** — provides application context for a selected business entity and remains valid for 1 hour.
+
+Business entities are selected using their numeric `businessEntityId`. The backend resolves the corresponding entity information from the database and returns the authorized context to the client.
+
+---
+
+## Features
+
+* 🔐 JWT authentication and authorization
+* 🎫 SSO and system-token authentication contexts
+* 🏢 Business-entity switching
+* 👤 Account registration and profile management
+* 🔑 Password change support with BCrypt hashing
+* 🛡️ Role-aware access control
+* ⚡ Login rate limiting
+* 📚 Swagger / OpenAPI documentation
+* 🗄️ SQL Server integration through Entity Framework Core
+* 🚨 Centralized exception handling
+* 🌐 Forwarded-header support for reverse proxies
+* 📦 Consistent API response envelopes
+
+---
+
+## Authentication Flow
+
+```text
+Client
+  │
+  ▼
+Login
+  │
+  ├── Validate credentials
+  ├── Validate business entity
+  ├── Resolve role
+  └── Issue tokens
+        │
+        ├── SSO Token
+        │
+        └── System Token
+                │
+                ▼
+        Protected API Requests
+                │
+                ▼
+        Role / Entity Context
+```
+
+### Token Lifetimes
+
+| Token        | Purpose                              | Lifetime |
+| ------------ | ------------------------------------ | -------: |
+| SSO Token    | Account identity and session context |  8 hours |
+| System Token | Business-entity scoped access        |   1 hour |
+
+Protected endpoints accept:
+
+```http
+Authorization: Bearer <token>
+```
+
+---
+
+## Security
+
+### Login Rate Limiting
+
+The login endpoint is limited to:
+
+```text
+5 requests / 15 minutes / client IP
+```
+
+The sixth request returns:
+
+```http
+429 Too Many Requests
+```
+
+with a rate-limit response.
+
+### Password Security
+
+Passwords are handled using **BCrypt** hashing.
+
+### Configuration Security
+
+Sensitive configuration values should be supplied through:
+
+* Environment variables
+* .NET User Secrets
+* Deployment-specific configuration
+
+Never commit production connection strings or JWT signing keys.
+
+---
+
+## Architecture
+
+The project follows a practical layered organization:
+
+```text
+CAS-Login-Back-End/
+├── Controllers/
+├── Data/
+├── Exceptions/
+├── Middleware/
+├── Models/
+├── Services/
+├── Properties/
+├── Program.cs
+├── appsettings.json
+└── README.md
+```
+
+### Main Responsibilities
+
+| Area          | Responsibility                               |
+| ------------- | -------------------------------------------- |
+| `Controllers` | HTTP endpoints and request handling          |
+| `Services`    | Business logic and authentication operations |
+| `Data`        | Entity Framework Core database access        |
+| `Models`      | Request, response, and domain models         |
+| `Middleware`  | Cross-cutting HTTP processing                |
+| `Exceptions`  | Centralized application exceptions           |
+| `Properties`  | Development and launch configuration         |
+
+---
+
+## Technology Stack
+
+| Technology            | Purpose                    |
+| --------------------- | -------------------------- |
+| C#                    | Primary language           |
+| ASP.NET Core          | Web API framework          |
+| .NET 10               | Runtime / target framework |
+| Entity Framework Core | ORM                        |
+| SQL Server            | Database                   |
+| JWT Bearer            | Authentication             |
+| BCrypt                | Password hashing           |
+| Swagger / OpenAPI     | API documentation          |
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- .NET SDK 10.0
-- Access to the SQL Server database
+Install:
 
-Configure the connection and JWT settings in `appsettings.json` or user secrets:
+* [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+* SQL Server
+* Git
+
+### Clone
+
+```bash
+git clone https://github.com/hatem247/CAS-Login-Back-End.git
+cd CAS-Login-Back-End
+```
+
+### Configuration
+
+Configure the application using your local environment or .NET User Secrets.
+
+Required settings include:
 
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=SERVER;Database=DATABASE;Integrated Security=True;Encrypt=True;Trust Server Certificate=True"
+    "DefaultConnection": "YOUR_CONNECTION_STRING"
   },
   "JWT": {
-    "Key": "a-long-random-signing-key",
+    "Key": "YOUR_JWT_SIGNING_KEY",
     "Issuer": "CAS.Api",
     "Audience": "CAS.Clients",
     "ExpirationMinutes": 60,
@@ -35,29 +213,64 @@ Configure the connection and JWT settings in `appsettings.json` or user secrets:
 }
 ```
 
-Run the project:
+### Run
 
-```powershell
+```bash
+dotnet restore
+dotnet build
 dotnet run
 ```
 
-Swagger UI is available at `/swagger` in the Development environment.
+Swagger is available at:
 
-## Authentication
-
-Protected endpoints accept either a valid SSO token or system JWT:
-
-```http
-Authorization: Bearer {jwtToken}
+```text
+/swagger
 ```
 
-The login and registration endpoints are anonymous. All other protected endpoints accept both token types.
+when running in the Development environment.
 
-The system JWT contains the account, role, business-entity ID/name, and `RedirectUrl` claims. The redirect URL is data returned from the authorized `Tbl_BusinessEntity.URL` row; clients should use it only after successful authentication.
+---
 
-## Response envelope
+## API Overview
 
-All successful responses use this shape:
+### Authentication
+
+| Method | Endpoint             | Access        |
+| ------ | -------------------- | ------------- |
+| `POST` | `/api/auth/login`    | Public        |
+| `POST` | `/api/auth/switch`   | Authenticated |
+| `POST` | `/api/auth/validate` | Authenticated |
+
+### Account
+
+| Method | Endpoint                       | Access        |
+| ------ | ------------------------------ | ------------- |
+| `POST` | `/api/account/register`        | Public        |
+| `GET`  | `/api/account/profile`         | Authenticated |
+| `PUT`  | `/api/account/profile`         | Authenticated |
+| `POST` | `/api/account/change-password` | Authenticated |
+
+### Business Entities
+
+| Method | Endpoint                          | Access        |
+| ------ | --------------------------------- | ------------- |
+| `GET`  | `/api/businessentity`             | Authenticated |
+| `GET`  | `/api/businessentity/{id}`        | Authenticated |
+| `GET`  | `/api/businessentity/my-entities` | Authenticated |
+
+### Roles
+
+| Method | Endpoint                               | Access        |
+| ------ | -------------------------------------- | ------------- |
+| `GET`  | `/api/role`                            | Authenticated |
+| `GET`  | `/api/role/{id}`                       | Authenticated |
+| `GET`  | `/api/role/account/{businessEntityId}` | Authenticated |
+
+---
+
+## Response Format
+
+Successful responses follow a consistent envelope:
 
 ```json
 {
@@ -67,48 +280,29 @@ All successful responses use this shape:
 }
 ```
 
-Errors are returned by the exception middleware:
+Errors follow:
 
 ```json
 {
   "statusCode": 400,
   "success": false,
-  "message": "Registration validation failed.",
-  "errors": ["Email is required."]
+  "message": "Validation failed.",
+  "errors": [
+    "Example validation error."
+  ]
 }
 ```
 
-Common status codes are `400` (validation), `401` (invalid token, credentials, or access), `404` (not found), and `500`.
+---
 
-`POST /api/auth/login` is limited to five requests per client IP in each 15-minute fixed window. The sixth request returns `429 Too Many Requests` with `Too many login attempts. Please try again later.` Other endpoints are unaffected. When deployed behind a reverse proxy or load balancer, configure its trusted address in `ForwardedHeaders:KnownProxies` (or its trusted CIDR in `ForwardedHeaders:KnownNetworks`); forwarded client-IP headers from untrusted sources are ignored.
+## Example
 
-## Endpoint summary
+### Login Request
 
-| Method | Endpoint | Authentication | Purpose |
-| --- | --- | --- | --- |
-| POST | `/api/auth/login` | None | Authenticate and obtain SSO/System tokens. |
-| POST | `/api/auth/switch` | SSO or System token | Obtain a system token for another entity. |
-| POST | `/api/auth/validate` | SSO or System token | Validate a token. |
-| POST | `/api/account/register` | None | Create an account and login record. |
-| GET | `/api/account/profile` | SSO or System token | Get the current profile. |
-| PUT | `/api/account/profile` | SSO or System token | Update the current profile names. |
-| POST | `/api/account/change-password` | SSO or System token | Change the current password. |
-| GET | `/api/businessentity` | SSO or System token | List business entities. |
-| GET | `/api/businessentity/{id}` | SSO or System token | Get one business entity. |
-| GET | `/api/businessentity/my-entities` | SSO or System token | List entities assigned to the caller. |
-| GET | `/api/role` | SSO or System token | List roles. |
-| GET | `/api/role/{id}` | SSO or System token | Get a role. |
-| GET | `/api/role/account/{businessEntityId}` | SSO or System token | Get the caller's role for an entity. |
-
-## Authentication endpoints
-
-### `POST /api/auth/login`
-
-Authenticates credentials and verifies the user has a role in the supplied business entity.
-
-`password` may be either the normal password or the exact stored BCrypt hash. Normal passwords are verified with BCrypt.
-
-Request:
+```http
+POST /api/auth/login
+Content-Type: application/json
+```
 
 ```json
 {
@@ -118,7 +312,7 @@ Request:
 }
 ```
 
-Success response (`200`):
+### Login Response
 
 ```json
 {
@@ -130,242 +324,50 @@ Success response (`200`):
     "accountId": 42,
     "email": "user@example.com",
     "fullNameEn": "Jane Doe",
-    "fullNameAr": "جين دو",
     "role": "Administrator",
     "businessEntityId": 1,
     "businessEntityName": "CAS",
-    "redirectUrl": "https://cas.example.com",
-    "ssoExpiresAt": "2026-08-11T18:00:00Z",
-    "jwtCreatedAt": "2026-08-11T10:00:00Z",
-    "jwtExpiresAt": "2026-08-11T11:00:00Z"
+    "redirectUrl": "https://example.com"
   }
 }
 ```
 
-`redirectUrl` is an empty string when the selected entity has no URL configured.
+---
 
-### `POST /api/auth/switch`
+## Reverse Proxy Deployment
 
-Uses an SSO or system token to obtain a new system token scoped to another entity to which the account is assigned.
+When deployed behind a reverse proxy or load balancer, configure trusted forwarded headers so client IP detection remains correct for login rate limiting.
 
-Request headers:
+Trusted proxy configuration should be deployment-specific and must not trust arbitrary forwarded headers.
 
-```http
-Authorization: Bearer {ssoOrJwtToken}
+---
+
+## Project Structure
+
+```text
+Controllers/
+Data/
+Exceptions/
+Middleware/
+Models/
+Services/
+Program.cs
 ```
 
-Request:
+The project is intentionally organized around clear responsibilities while keeping the codebase straightforward to maintain.
 
-```json
-{
-  "businessEntityId": 2
-}
-```
+---
 
-Success response (`200`):
+## Status
 
-```json
-{
-  "success": true,
-  "message": "Token exchanged successfully.",
-  "data": {
-    "jwtToken": "eyJ...",
-    "role": "Instructor",
-    "businessEntityId": 2,
-    "businessEntityName": "Learning Portal",
-    "redirectUrl": "https://learning.example.com",
-    "jwtCreatedAt": "2026-08-11T10:05:00Z",
-    "jwtExpiresAt": "2026-08-11T11:05:00Z"
-  }
-}
-```
+**Active Development**
 
-### `POST /api/auth/validate`
+This project is being developed as a reusable centralized authentication and authorization backend for connected applications.
 
-Validates either an SSO or system JWT.
+---
 
-Request headers:
+## Author
 
-```http
-Authorization: Bearer {token}
-```
+**Hatem Medhat**
 
-Success response (`200`):
-
-```json
-{
-  "success": true,
-  "message": "Token validation completed successfully.",
-  "data": {
-    "isValid": true,
-    "isExpired": false,
-    "tokenType": "System",
-    "accountId": 42,
-    "createdAt": "2026-08-11T10:00:00Z"
-  }
-}
-```
-
-For SSO tokens, `createdAt` is `null` because SSO tokens do not carry that claim.
-
-## Account endpoints
-
-### `POST /api/account/register`
-
-Creates an active `Account_Info` profile and associated login credentials.
-
-```json
-{
-  "nationalId": "29801011234567",
-  "email": "user@example.com",
-  "password": "P@ssw0rd!",
-  "confirmPassword": "P@ssw0rd!",
-  "fullNameEn": "Jane Doe",
-  "fullNameAr": "جين دو"
-}
-```
-
-Success response (`201`):
-
-```json
-{
-  "success": true,
-  "message": "Account registered successfully.",
-  "data": {
-    "accountId": 42,
-    "email": "user@example.com",
-    "nationalId": "29801011234567",
-    "phone": null,
-    "city": null,
-    "fullNameEn": "Jane Doe",
-    "fullNameAr": "جين دو",
-    "isActive": true,
-    "createdAt": "2026-08-11",
-    "statusId": 1,
-    "statusName": "Active",
-    "governoratesId": null,
-    "governorateNameEn": null,
-    "governorateNameAr": null
-  }
-}
-```
-
-### `GET /api/account/profile`
-
-Accepts either a valid SSO or system token. The API reads the account ID from the validated token, confirms that its login/profile is active, then returns the same profile object shown in the registration response.
-
-### `PUT /api/account/profile`
-
-Requires an SSO or system token. The caller can update their names, phone number, and city. Identity, status, and other ID fields cannot be changed through this endpoint.
-
-```json
-{
-  "fullNameEn": "Jane A. Doe",
-  "fullNameAr": "جين أ. دو"
-}
-```
-
-Include optional `phone` and `city` fields in the request; send `null` for either field to clear it. Success response (`200`) contains the updated profile object.
-
-### `POST /api/account/change-password`
-
-Requires an SSO or system token.
-
-`currentPassword` may be either the normal password or the exact stored BCrypt hash. Normal passwords are verified with BCrypt.
-
-```json
-{
-  "currentPassword": "P@ssw0rd!",
-  "newPassword": "N3wP@ssw0rd!",
-  "confirmPassword": "N3wP@ssw0rd!"
-}
-```
-
-Success response (`200`):
-
-```json
-{
-  "success": true,
-  "message": "Password changed successfully.",
-  "data": null
-}
-```
-
-## Business entity endpoints
-
-All business-entity endpoints accept an SSO or system token.
-
-### `GET /api/businessentity`
-
-Lists `Tbl_BusinessEntity` rows.
-
-### `GET /api/businessentity/{id}`
-
-Gets an entity by `Tbl_BusinessEntity.ID`.
-
-### `GET /api/businessentity/my-entities`
-
-Lists only entities assigned to the authenticated account.
-
-Entity response example:
-
-```json
-{
-  "success": true,
-  "message": "Business entities retrieved successfully.",
-  "data": [
-    {
-      "id": 1,
-      "name": "CAS",
-      "description": "CAS",
-      "redirectUrl": "https://cas.example.com",
-      "isActive": true
-    }
-  ]
-}
-```
-
-`isActive` is currently returned as `true` because `Tbl_BusinessEntity` does not expose an active-status column.
-
-## Role endpoints
-
-All role endpoints accept an SSO or system token.
-
-### `GET /api/role`
-
-Lists all roles.
-
-### `GET /api/role/{id}`
-
-Gets a role by ID.
-
-### `GET /api/role/account/{businessEntityId}`
-
-Gets the authenticated account's role in the specified business entity.
-
-Role response example:
-
-```json
-{
-  "success": true,
-  "message": "Role retrieved successfully.",
-  "data": {
-    "roleId": 3,
-    "name": "Instructor",
-    "description": "Learning Portal"
-  }
-}
-```
-
-## Business-entity resolution
-
-`Tbl_BusinessEntity` provides the canonical entity data:
-
-| Column | API use |
-| --- | --- |
-| `ID` | `businessEntityId` accepted by login, switch, and account-role endpoints. |
-| `BusinessEntity` | Resolved name returned in responses and used to match existing `AccountRoles.BusinessEntityName`. |
-| `URL` | Returned as `redirectUrl` and embedded in system JWTs. |
-| `OrderNo` | Stored by the table but not currently returned or used by the API. |
-
-This preserves compatibility with the existing `AccountRoles.BusinessEntityName` schema while ensuring client requests use the stable numeric entity ID.
+[GitHub](https://github.com/hatem247) · [LinkedIn](https://www.linkedin.com/in/hatem--medhat/)
