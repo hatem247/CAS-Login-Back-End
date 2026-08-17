@@ -45,6 +45,13 @@ Generated\ Files/
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
 
+# Local configuration
+appsettings.Local.json
+appsettings.*.Local.json
+
+# User secrets
+*.usersecrets.json
+
 # NUnit
 *.VisualState.xml
 TestResult.xml
